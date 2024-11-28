@@ -2,18 +2,27 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
+	"path/filepath"
+	"runtime"
 )
 
 func CanonicalizePath(path *string, slash_bits *uint64) {
-	len := len(*path)
-	str := ""
-	if len > 0 {
-		str = &(*path)[0]
+	// 确保路径是绝对的
+	absPath, err := filepath.Abs(*path)
+	if err != nil {
+		fmt.Printf("Error getting absolute path: %v\n", err)
+		return
 	}
+	// 清理路径，去掉多余的分隔符和".."
+	cleanPath := filepath.Clean(absPath)
 
-	CanonicalizePath(str, &len, slash_bits)
-	path.resize(len)
+	// 如果需要，这里可以进一步处理路径，例如转换所有分隔符为一个特定的字符
+	// 但在Go中，这通常不是必需的，因为filepath.Clean已经处理了路径分隔符
+
+	// 更新传入的路径指针
+	*path = cleanPath
 }
 
 func Error(msg string, ap ...interface{}) {
@@ -34,56 +43,40 @@ func Warning(msg string, ap ...interface{}) {
 	fmt.Fprint(os.Stderr, "\n")
 }
 
+// SpellcheckStringV 接受一个字符串和一个字符串切片，返回编辑距离最小的字符串。
+func SpellcheckStringV(text string, words []string) string {
+	const kAllowReplacements = true
+	const kMaxValidEditDistance = 3
 
-func SpellcheckStringV(text string,  words []string) string {
-  const bool kAllowReplacements = true;
-  const int kMaxValidEditDistance = 3;
-
-  int min_distance = kMaxValidEditDistance + 1;
-  const char* result = NULL;
-  for (vector<const char*>::const_iterator i = words.begin();
-       i != words.end(); ++i) {
-    int distance = EditDistance(*i, text, kAllowReplacements,
-                                kMaxValidEditDistance);
-    if (distance < min_distance) {
-      min_distance = distance;
-      result = *i;
-    }
-  }
-  return result;
+	var minDistance = kMaxValidEditDistance + 1
+	var result string
+	for _, word := range words {
+		distance := EditDistance(word, text, kAllowReplacements, kMaxValidEditDistance)
+		if distance < minDistance {
+			minDistance = distance
+			result = word
+		}
+	}
+	return result
 }
 
-func  SpellcheckString( text string, args...interface{}) string {
-  // Note: This takes a const char* instead of a string& because using
-  // va_start() with a reference parameter is undefined behavior.
-  va_list ap;
-  va_start(ap, text);
-  vector<const char*> words;
-  const char* word;
-  while ((word = va_arg(ap, const char*)))
-    words.push_back(word);
-  va_end(ap);
-  return SpellcheckStringV(text, words);
+func SpellcheckString(text string, words ...string) string {
+	// Note: This takes a const char* instead of a string& because using
+	// va_start() with a reference parameter is undefined behavior.
+	return SpellcheckStringV(text, words)
 }
 
 func GetWorkingDirectory() string {
- ret := ""
- success := ""
-	do {
-		ret.resize(ret.size() + 1024);
-		errno = 0;
-		success = getcwd(&ret[0], ret.size());
-	} while (!success && errno == ERANGE);
-	if (!success) {
-		Fatal("cannot determine working directory: %s", strerror(errno));
+	currentDir, err := os.Getwd()
+	if err != nil {
+		log.Fatalf("cannot determine working directory: %v", err)
 	}
-	ret.resize(strlen(&ret[0]));
-	return ret
+	return currentDir
 }
 
 const EXIT_SUCCESS = 0
 const EXIT_FAILURE = 1
 
-func GetProcessorCount() int  {
-
+func GetProcessorCount() int {
+	return runtime.NumCPU()
 }

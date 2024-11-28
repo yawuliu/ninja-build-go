@@ -7,7 +7,7 @@ type Parser struct {
 }
 
 func NewParser(state *State, file_reader *FileReader) *Parser {
-	ret := &Parser{}
+	ret := Parser{}
 	ret.state_ = state
 	ret.file_reader_ = file_reader
 	return &ret

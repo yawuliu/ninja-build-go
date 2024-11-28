@@ -7,9 +7,9 @@ type DepsLog struct {
 	file_               *os.File
 	file_path_          string
 
-	/// Maps id -> Node.
+	/// Maps id . Node.
 	nodes_ []*Node
-	/// Maps id -> deps of that id.
+	/// Maps id . deps of that id.
 	deps_ []*Deps
 }
 

@@ -111,8 +111,8 @@ func (this *InputsCollector) GetInputsAsStrings(shell_escape bool) []string {
 
 // / Reset collector state.
 func (this *InputsCollector) Reset() {
-	this.inputs_.clear()
-	this.visited_nodes_.clear()
+	this.inputs_ = []*Node{}
+	this.visited_nodes_= map[*Node]bool{}
 }
 
 func NewEdge() *Edge {
@@ -124,8 +124,9 @@ func NewEdge() *Edge {
 func (this*Edge )AllInputsReady() bool {
   for (vector<Node*>::const_iterator i = inputs_.begin();
        i != inputs_.end(); ++i) {
-    if ((*i).in_edge() && !(*i).in_edge().outputs_ready())
-      return false;
+    if ((*i).in_edge() && !(*i).in_edge().outputs_ready()) {
+		return false
+	}
   }
   return true;
 }
@@ -134,19 +135,20 @@ func (this*Edge )AllInputsReady() bool {
 /// Expand all variables in a command and return it as a string.
 /// If incl_rsp_file is enabled, the string will also contain the
 /// full contents of a response file (if applicable)
-func (this*Edge ) EvaluateCommand(bool incl_rsp_file = false) string {
-  string command = GetBinding("command");
+func (this*Edge ) EvaluateCommand( incl_rsp_file bool) string {
+   command := GetBinding("command");
   if (incl_rsp_file) {
-    string rspfile_content = GetBinding("rspfile_content");
-    if (!rspfile_content.empty())
-      command += ";rspfile=" + rspfile_content;
+    rspfile_content := GetBinding("rspfile_content");
+    if (!rspfile_content.empty()) {
+		command += ";rspfile=" + rspfile_content
+	}
   }
   return command;
 }
 
 /// Returns the shell-escaped value of |key|.
 func (this*Edge ) GetBinding(key string) string {
-   env := NewEdgeEnv(this, EdgeEnv::kShellEscape);
+   env := NewEdgeEnv(this, kShellEscape);
   return env.LookupVariable(key);
 }
 
@@ -156,18 +158,18 @@ func (this*Edge ) GetBinding(key string) string {
 
 /// Like GetBinding("depfile"), but without shell escaping.
 func (this*Edge ) GetUnescapedDepfile() string{
-   env := NewEdgeEnv(this, EdgeEnv::kDoNotEscape);
+   env := NewEdgeEnv(this, kDoNotEscape);
   return env.LookupVariable("depfile");
 }
 
 /// Like GetBinding("dyndep"), but without shell escaping.
 func (this*Edge ) GetUnescapedDyndep()  string{
-   env := NewEdgeEnv(this, EdgeEnv::kDoNotEscape);
+   env := NewEdgeEnv(this, kDoNotEscape);
   return env.LookupVariable("dyndep");
 }
 /// Like GetBinding("rspfile"), but without shell escaping.
 func (this*Edge )GetUnescapedRspfile()  string{
-  env := NewEdgeEnv(this, EdgeEnv::kDoNotEscape);
+  env := NewEdgeEnv(this, kDoNotEscape);
   return env.LookupVariable("rspfile");
 }
 
@@ -268,7 +270,7 @@ func (this*DependencyScan) RecomputeDirty(node *Node, validation_nodes []*Node, 
   // RecomputeNodeDirty might return new validation nodes that need to be
   // checked for dirty state, keep a queue of nodes to visit.
   while (!nodes.empty()) {
-    Node* node = nodes.front();
+    node := nodes.front();
     nodes.pop_front();
 
     stack.clear();
@@ -327,34 +329,39 @@ func (this*DependencyScan)  LoadDyndeps1(node *Node, ddf *DyndepFile, err *strin
 }
 
 func (this*DependencyScan)  RecomputeNodeDirty(node *Node, stack []*Node, validation_nodes []*Node, err *string)bool {
-  Edge* edge = node.in_edge();
+  edge := node.in_edge();
   if (!edge) {
     // If we already visited this leaf node then we are done.
-    if (node.status_known())
-      return true;
+    if (node.status_known()) {
+		return true
+	}
     // This node has no in-edge; it is dirty if it is missing.
-    if (!node.StatIfNecessary(disk_interface_, err))
-      return false;
-    if (!node.exists())
-      explanations_.Record(node, "%s has no in-edge and is missing",
-                           node.path().c_str());
+    if (!node.StatIfNecessary(disk_interface_, err)) {
+		return false
+	}
+    if (!node.exists()) {
+		explanations_.Record(node, "%s has no in-edge and is missing",
+			node.path().c_str())
+	}
     node.set_dirty(!node.exists());
     return true;
   }
 
   // If we already finished this edge then we are done.
-  if (edge.mark_ == Edge::VisitDone)
-    return true;
+  if (edge.mark_ == Edge::VisitDone){
+		return true
+	}
 
   // If we encountered this edge earlier in the call stack we have a cycle.
-  if (!VerifyDAG(node, stack, err))
-    return false;
+  if (!VerifyDAG(node, stack, err)) {
+	  return false
+  }
 
   // Mark the edge temporarily while in the call stack.
   edge.mark_ = Edge::VisitInStack;
   stack.push_back(node);
 
-  bool dirty = false;
+   dirty := false;
   edge.outputs_ready_ = true;
   edge.deps_missing_ = false;
 
@@ -371,14 +378,16 @@ func (this*DependencyScan)  RecomputeNodeDirty(node *Node, stack []*Node, valida
     //   Later during the build the dyndep file will become ready and be
     //   loaded to update this edge before it can possibly be scheduled.
     if (edge.dyndep_ && edge.dyndep_.dyndep_pending()) {
-      if (!RecomputeNodeDirty(edge.dyndep_, stack, validation_nodes, err))
-        return false;
+      if (!RecomputeNodeDirty(edge.dyndep_, stack, validation_nodes, err)) {
+		  return false
+	  }
 
       if (!edge.dyndep_.in_edge() ||
           edge.dyndep_.in_edge().outputs_ready()) {
         // The dyndep file is ready, so load it now.
-        if (!LoadDyndeps(edge.dyndep_, err))
-          return false;
+        if (!LoadDyndeps(edge.dyndep_, err)) {
+			return false
+		}
       }
     }
   }
@@ -386,16 +395,18 @@ func (this*DependencyScan)  RecomputeNodeDirty(node *Node, stack []*Node, valida
   // Load output mtimes so we can compare them to the most recent input below.
   for (vector<Node*>::iterator o = edge.outputs_.begin();
        o != edge.outputs_.end(); ++o) {
-    if (!(*o).StatIfNecessary(disk_interface_, err))
-      return false;
+    if (!(*o).StatIfNecessary(disk_interface_, err)) {
+		return false
+	}
   }
 
   if (!edge.deps_loaded_) {
     // This is our first encounter with this edge.  Load discovered deps.
     edge.deps_loaded_ = true;
     if (!dep_loader_.LoadDeps(edge, err)) {
-      if (!err.empty())
-        return false;
+      if (!err.empty()) {
+		  return false
+	  }
       // Failed to load dependency info: rebuild to regenerate it.
       // LoadDeps() did explanations_.Record() already, no need to do it here.
       dirty = edge.deps_missing_ = true;
@@ -420,8 +431,9 @@ func (this*DependencyScan)  RecomputeNodeDirty(node *Node, stack []*Node, valida
 
     // If an input is not ready, neither are our outputs.
     if (Edge* in_edge = (*i).in_edge()) {
-      if (!in_edge.outputs_ready_)
-        edge.outputs_ready_ = false;
+      if (!in_edge.outputs_ready_) {
+		  edge.outputs_ready_ = false
+	  }
     }
 
     if (!edge.is_order_only(i - edge.inputs_.begin())) {
@@ -601,7 +613,7 @@ func (this* EdgeEnv ) LookupVariable(var1 string) string {
     if (it != this.lookups_.end()) {
       cycle := ""
       for (; it != this.lookups_.end(); ++it){
-			cycle.append(*it + " -> ")
+			cycle.append(*it + " . ")
 	  }
       cycle.append(var1);
       log.Fatal("cycle in rule variables: " + cycle)
@@ -632,7 +644,7 @@ func (this* EdgeEnv )  MakePathList(span *Node,  size int64,  sep int32) string 
   for (const Node* const* i = span; i != span + size; ++i) {
     if (!result.empty())
       result.push_back(sep);
-    const string& path = (*i)->PathDecanonicalized();
+    const string& path = (*i).PathDecanonicalized();
     if (escape_in_out_ == kShellEscape) {
       GetWin32EscapedString(path, &result);
     } else {

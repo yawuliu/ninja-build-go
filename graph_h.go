@@ -156,7 +156,7 @@ func (this *ImplicitDepLoader) deps_log() *DepsLog {
 
 // / Process loaded implicit dependencies for \a edge and update the graph
 // / @return false on error (without filling \a err if info is just missing)
-func (this *ImplicitDepLoader) ProcessDepfileDeps(edge *Edge, depfile_ins []*StringPiece, err *string) bool {
+func (this *ImplicitDepLoader) ProcessDepfileDeps(edge *Edge, depfile_ins []*string, err *string) bool {
 
 }
 

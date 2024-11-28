@@ -16,3 +16,6 @@ type LogEntry struct {
 	end_time     int
 	mtime        TimeStamp
 }
+type BuildLogUser interface {
+	IsPathDead(path string) bool
+}

@@ -43,7 +43,7 @@ func (this *BuildLog) entries() *Entries { return this.entries_ }
 // / will be set.
 func (this *BuildLog) OpenForWriteIfNeeded() bool {}
 
-func HashCommand(command StringPiece) uint64 {
+func HashCommand(command string) uint64 {
 
 }
 

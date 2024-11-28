@@ -170,7 +170,7 @@ func (this *EvalString) AddText(text string) {
 		this.parsed_ = append(this.parsed_, TokenPair{key: text, tp: RAW})
 	}
 }
-func (this *EvalString) AddSpecial(text StringPiece) {
+func (this *EvalString) AddSpecial(text string) {
 	if len(this.parsed_) == 0 && this.single_token_ != "" {
 		// Going from one to two tokens, so we can no longer apply
 		// our single_token_ optimization and need to push everything

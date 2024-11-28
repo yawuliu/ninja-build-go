@@ -40,8 +40,8 @@ func IsDepsEntryLiveFor(node *Node) bool {
 }
 
 // / Used for tests.
-func (this *DepsLog) nodes() []*Node { return nodes_ }
-func (this *DepsLog) deps() []*Deps  { return deps_ }
+func (this *DepsLog) nodes() []*Node { return this.nodes_ }
+func (this *DepsLog) deps() []*Deps  { return this.deps_ }
 
 // Updates the in-memory representation.  Takes ownership of |deps|.
 // Returns true if a prior deps record was deleted.

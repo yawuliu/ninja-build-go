@@ -57,7 +57,7 @@ func  TimeStampFromFileTime(filetime *FILETIME) TimeStamp{
 	// We don't much care about epoch correctness but we do want the
 	// resulting value to fit in a 64-bit integer.
 	mtime := ((uint64)filetime.dwHighDateTime << 32) | ((uint64_t)filetime.dwLowDateTime)
-	// 1600 epoch -> 2000 epoch (subtract 400 years).
+	// 1600 epoch . 2000 epoch (subtract 400 years).
 	return TimeStamp(mtime) - 12622770400LL * (1000000000LL / 100)
 }
 

@@ -117,7 +117,7 @@ func (this* Cleaner) PrintFooter() {
     if (!generator && e.GetBindingBool("generator")) {
 		continue
 	}
-    for (vector<Node*>::iterator out_node = (*e)->this.outputs_.begin();out_node != (*e)->outputs_.end(); ++out_node) {
+    for (vector<Node*>::iterator out_node = (*e).this.outputs_.begin();out_node != (*e).outputs_.end(); ++out_node) {
         this.Remove(out_node.path());
     }
 
@@ -132,7 +132,7 @@ func(this* Cleaner) CleanDead(entries *Entries) int {
   this.PrintHeader();
   this.LoadDyndeps();
   for (BuildLog::Entries::const_iterator i = entries.begin(); i != entries.end(); ++i) {
-    n := state_.LookupNode(i->first);
+    n := state_.LookupNode(i.first);
     // Detecting stale outputs works as follows:
     //
     // - If it has no Node, it is not in the build graph, or the deps log
@@ -142,8 +142,8 @@ func(this* Cleaner) CleanDead(entries *Entries) int {
     //   entry in the deps log, but no longer referenced from the build
     //   graph.
     //
-    if (!n || (!n->in_edge() && n->out_edges().empty())) {
-      this.Remove(i->first.AsString());
+    if (!n || (!n.in_edge() && n.out_edges().empty())) {
+      this.Remove(i.first.AsString());
     }
   }
   this.PrintFooter();
@@ -151,13 +151,14 @@ func(this* Cleaner) CleanDead(entries *Entries) int {
 }
 
 func (this* Cleaner) DoCleanTarget(target *Node) {
-  if (Edge* e = target->in_edge()) {
+  e := target.in_edge()
+  if  e!=nil {
     // Do not try to remove phony targets
-    if (!e->is_phony()) {
-      this.Remove(target->path());
+    if (!e.is_phony()) {
+      this.Remove(target.path());
       this.RemoveEdgeFiles(e);
     }
-    for (vector<Node*>::iterator n = e->inputs_.begin(); n != e->inputs_.end();
+    for (vector<Node*>::iterator n = e.inputs_.begin(); n != e.inputs_.end();
          ++n) {
       next := *n;
       // call DoCleanTarget recursively if this node has not been visited
@@ -172,7 +173,9 @@ func (this* Cleaner) DoCleanTarget(target *Node) {
 }
 
    func (this* Cleaner) CleanTarget(target *Node) int {
-  assert(target);
+  if target==nil {
+    panic("target==nil")
+  }
 
      this.Reset();
      this.PrintHeader();

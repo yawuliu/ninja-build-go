@@ -12,22 +12,24 @@ type CommandCollector struct {
 }
 
 func(this*CommandCollector) CollectFrom(node *Node) {
-	assert(node);
+	if node==nil {
+		panic("node==nil")
+	}
 
-	if (!visited_nodes_.insert(node).second) {
+	if (!this.visited_nodes_.insert(node).second) {
 		return
 	}
 
 	edge := node.in_edge();
-	if (!edge || !visited_edges_.insert(edge).second) {
+	if edge==nil || !this.visited_edges_.insert(edge).second {
 		return
 	}
 
 	for (Node* input_node : edge.inputs_){
-		CollectFrom(input_node)
+		this.CollectFrom(input_node)
 	}
 
-	if (!edge.is_phony()) {
+	if !edge.is_phony() {
 		in_edges.push_back(edge)
 	}
 }

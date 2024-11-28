@@ -1,65 +1,63 @@
 package main
 
-func RunBrowsePython(state *State, ninja_command,
-	input_file string, args []string) {
-	/*
-		  // Fork off a Python process and have it run our code via its stdin.
-		  // (Actually the Python process becomes the parent.)
-		   pipefd := [2]int{}
-		  if (pipe(pipefd) < 0) {
-		    fmt.Fprintf(os.Stderr, "ninja: pipe");
-		    return;
-		  }
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"syscall"
+)
 
-		  pid := fork();
-		  if (pid < 0) {
-		    fmt.Fprintf(os.Stderr, "ninja: fork");
-		    return;
-		  }
+// RunBrowsePython 函数，模拟C++中的RunBrowsePython函数
+func RunBrowsePython(state *State, ninjaCommand string, inputFile string, argc int, argv []string) {
+	// 创建管道
+	pipefd_r, pipefd_w, err := os.Pipe()
+	if err != nil {
+		panic(err)
+	}
+	defer pipefd_r.Close()
+	defer pipefd_w.Close()
 
-		  if (pid > 0) {  // Parent.
-		    close(pipefd[1]);
-		    for {
-		      if (dup2(pipefd[0], 0) < 0) {
-		        fmt.Fprintf(os.Stderr, "ninja: dup2");
-		        break;
-		      }
+	// 创建子进程
+	pid, err := fork()
+	if err != nil {
+		panic(err)
+	}
 
-		      command := []string{}
-		      command = append(command, NINJA_PYTHON);
-		      command = append(command,"-");
-		      command = append(command,"--ninja-command");
-		      command = append(command,ninja_command);
-		      command = append(command,"-f");
-		      command = append(command,input_file);
-		      for i := 0; i < len(args); i++ {
-		          command= append(command, args[i])
-		      }
-		      command= append(command, "\n")
-		      execvp(command[0], const_cast<char**>(&command[0]));
-		      if (errno == ENOENT) {
-		        fmt.Printf("ninja: %s is required for the browse tool\n", NINJA_PYTHON);
-		      } else {
-		        fmt.Fprintf(os.Stderr,"ninja: execvp");
-		      }
-		      break;
-		    }
-		    os.Exit(1);
-		  } else {  // Child.
-		    close(pipefd[0]);
+	if pid > 0 {
+		// 父进程
+		pipefd_r.Close()
+		pipefd_w.Close()
 
-		    // Write the script file into the stdin of the Python process.
-		    // Only write n - 1 bytes, because Python 3.11 does not allow null
-		    // bytes in source code anymore, so avoid writing the null string
-		    // terminator.
-		    // See https://github.com/python/cpython/issues/96670
-		    kBrowsePyLength := len(kBrowsePy) - 1;
-		    len := write(pipefd[1], kBrowsePy, kBrowsePyLength);
-		    if len < kBrowsePyLength {
-				fmt.Fprintf(os.Stderr, "ninja: write")
+		// 构建Python命令
+		command := []string{"python", "-", "--ninja-command", ninjaCommand, "-f", inputFile}
+		command = append(command, argv...)
+		err = exec.Command(command[0], command[1:]...).Run()
+		if err != nil {
+			if _, ok := err.(*exec.Error); ok && err.(*exec.Error).Err == exec.ErrNotFound {
+				fmt.Printf("ninja: %s is required for the browse tool\n", "python")
+			} else {
+				panic(err)
 			}
-		    close(pipefd[1]);
-			os.Exit(0);
-		  }
-	*/
+		}
+		os.Exit(1)
+	} else {
+		// 子进程
+		defer os.Exit(0)
+
+		// 写入Python脚本到管道
+		browsePy := []byte(`# Python script content here`)
+		_, err = pipefd_w.Write(browsePy)
+		if err != nil {
+			panic(err)
+		}
+	}
+}
+
+// fork 函数，模拟C++中的fork
+func fork() (pid int, err error) {
+	pid, _, err = syscall.RawSyscall(syscall.SYS_FORK, 0, 0, 0)
+	if err != nil {
+		return -1, err
+	}
+	return pid, nil
 }

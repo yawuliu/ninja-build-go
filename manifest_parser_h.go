@@ -110,17 +110,20 @@ func (this *ManifestParser) Parse(filename, input string, err string) bool {
 
 // / Parse various statement types.
 func (this *ManifestParser) ParsePool(err string) bool                             {
-  string name;
-  if (!lexer_.ReadIdent(&name))
-    return lexer_.Error("expected pool name", err);
+   name := ""
+  if (!lexer_.ReadIdent(&name)) {
+	  return lexer_.Error("expected pool name", err)
+  }
 
-  if (!ExpectToken(Lexer::NEWLINE, err))
-    return false;
+  if (!ExpectToken(Lexer::NEWLINE, err)){
+	return false;
+	}
 
-  if (state_.LookupPool(name) != NULL)
-    return lexer_.Error("duplicate pool '" + name + "'", err);
+  if (state_.LookupPool(name) != NULL) {
+	  return lexer_.Error("duplicate pool '"+name+"'", err)
+  }
 
-  int depth = -1;
+  depth := -1;
 
   while (lexer_.PeekToken(Lexer::INDENT)) {
     string key;
@@ -138,22 +141,26 @@ func (this *ManifestParser) ParsePool(err string) bool                          
     }
   }
 
-  if (depth < 0)
-    return lexer_.Error("expected 'depth =' line", err);
+  if (depth < 0) {
+	  return lexer_.Error("expected 'depth =' line", err)
+  }
 
   state_.AddPool(new Pool(name, depth));
   return true;
 }
 func (this *ManifestParser) ParseRule(err string) bool                             {
-  string name;
-  if (!lexer_.ReadIdent(&name))
-    return lexer_.Error("expected rule name", err);
+  name := ""
+  if (!lexer_.ReadIdent(&name)) {
+	  return lexer_.Error("expected rule name", err)
+  }
 
-  if (!ExpectToken(Lexer::NEWLINE, err))
-    return false;
+  if (!ExpectToken(Lexer::NEWLINE, err)){
+	return false;
+  }
 
-  if (env_.LookupRuleCurrentScope(name) != NULL)
-    return lexer_.Error("duplicate rule '" + name + "'", err);
+  if (env_.LookupRuleCurrentScope(name) != NULL) {
+	  return lexer_.Error("duplicate rule '"+name+"'", err)
+  }
 
   Rule* rule = new Rule(name);  // XXX scoped_ptr
 
@@ -172,25 +179,28 @@ func (this *ManifestParser) ParseRule(err string) bool                          
     }
   }
 
-  if (rule.bindings_["rspfile"].empty() !=
-      rule.bindings_["rspfile_content"].empty()) {
+  if (rule.bindings_["rspfile"].empty() !=  rule.bindings_["rspfile_content"].empty()) {
     return lexer_.Error("rspfile and rspfile_content need to be "
                         "both specified", err);
   }
 
-  if (rule.bindings_["command"].empty())
-    return lexer_.Error("expected 'command =' line", err);
+  if (rule.bindings_["command"].empty()) {
+	  return lexer_.Error("expected 'command =' line", err)
+  }
 
   env_.AddRule(rule);
   return true;
 }
 func (this *ManifestParser) ParseLet(key string, val *EvalString, err string) bool {
-  if (!lexer_.ReadIdent(key))
-    return lexer_.Error("expected variable name", err);
-  if (!ExpectToken(Lexer::EQUALS, err))
-    return false;
-  if (!lexer_.ReadVarValue(value, err))
-    return false;
+  if (!lexer_.ReadIdent(key)) {
+	  return lexer_.Error("expected variable name", err)
+  }
+  if (!ExpectToken(Lexer::EQUALS, err)){
+	return false;
+  }
+  if (!lexer_.ReadVarValue(value, err)) {
+	  return false
+  }
   return true;
 }
 func (this *ManifestParser) ParseEdge(err string) bool                             {
@@ -212,7 +222,7 @@ func (this *ManifestParser) ParseEdge(err string) bool                          
   }
 
   // Add all implicit outs, counting how many as we go.
-  int implicit_outs = 0;
+  implicit_outs := 0;
   if (lexer_.PeekToken(Lexer::PIPE)) {
     for (;;) {
       EvalString out;
@@ -225,53 +235,63 @@ func (this *ManifestParser) ParseEdge(err string) bool                          
     }
   }
 
-  if (outs_.empty())
-    return lexer_.Error("expected path", err);
+  if (outs_.empty()) {
+	  return lexer_.Error("expected path", err)
+  }
 
-  if (!ExpectToken(Lexer::COLON, err))
-    return false;
+  if (!ExpectToken(Lexer::COLON, err)){
+	return false;
+  }
 
-  string rule_name;
-  if (!lexer_.ReadIdent(&rule_name))
-    return lexer_.Error("expected build command name", err);
+  rule_name := ""
+  if (!lexer_.ReadIdent(&rule_name)) {
+	  return lexer_.Error("expected build command name", err)
+  }
 
-  const Rule* rule = env_.LookupRule(rule_name);
-  if (!rule)
-    return lexer_.Error("unknown build rule '" + rule_name + "'", err);
+  rule := env_.LookupRule(rule_name);
+  if (!rule) {
+	  return lexer_.Error("unknown build rule '"+rule_name+"'", err)
+  }
 
   for (;;) {
     // XXX should we require one path here?
     EvalString in;
-    if (!lexer_.ReadPath(&in, err))
-      return false;
-    if (in.empty())
-      break;
+    if (!lexer_.ReadPath(&in, err)) {
+		return false
+	}
+    if (in.empty()) {
+		break
+	}
     ins_.push_back(std::move(in));
   }
 
   // Add all implicit deps, counting how many as we go.
-  int implicit = 0;
+  implicit := 0;
   if (lexer_.PeekToken(Lexer::PIPE)) {
     for (;;) {
       EvalString in;
-      if (!lexer_.ReadPath(&in, err))
-        return false;
-      if (in.empty())
-        break;
+      if (!lexer_.ReadPath(&in, err)){
+			return false;
+	  }
+      if (in.empty()){
+			break;
+	  }
       ins_.push_back(std::move(in));
       ++implicit;
     }
   }
 
   // Add all order-only deps, counting how many as we go.
-  int order_only = 0;
+  order_only := 0;
   if (lexer_.PeekToken(Lexer::PIPE2)) {
     for (;;) {
       EvalString in;
-      if (!lexer_.ReadPath(&in, err))
-        return false;
-      if (in.empty())
-        break;
+      if (!lexer_.ReadPath(&in, err)){
+		  return false;
+	  }
+      if (in.empty()){
+			break;
+	  }
       ins_.push_back(std::move(in));
       ++order_only;
     }
@@ -281,20 +301,23 @@ func (this *ManifestParser) ParseEdge(err string) bool                          
   if (lexer_.PeekToken(Lexer::PIPEAT)) {
     for (;;) {
       EvalString validation;
-      if (!lexer_.ReadPath(&validation, err))
-        return false;
-      if (validation.empty())
-        break;
+      if (!lexer_.ReadPath(&validation, err)){
+		return false;
+	  }
+      if (validation.empty()){
+		break;
+	  }
       validations_.push_back(std::move(validation));
     }
   }
 
-  if (!ExpectToken(Lexer::NEWLINE, err))
-    return false;
+  if (!ExpectToken(Lexer::NEWLINE, err)){
+	return false;
+  }
 
   // Bindings on edges are rare, so allocate per-edge envs only when needed.
-  bool has_indent_token = lexer_.PeekToken(Lexer::INDENT);
-  BindingEnv* env = has_indent_token ? new BindingEnv(env_) : env_;
+   has_indent_token := lexer_.PeekToken(Lexer::INDENT);
+   env := has_indent_token ? new BindingEnv(env_) : env_;
   while (has_indent_token) {
     string key;
     EvalString val;
@@ -305,22 +328,24 @@ func (this *ManifestParser) ParseEdge(err string) bool                          
     has_indent_token = lexer_.PeekToken(Lexer::INDENT);
   }
 
-  Edge* edge = state_.AddEdge(rule);
+  edge := state_.AddEdge(rule);
   edge.env_ = env;
 
-  string pool_name = edge.GetBinding("pool");
+  pool_name := edge.GetBinding("pool");
   if (!pool_name.empty()) {
     Pool* pool = state_.LookupPool(pool_name);
-    if (pool == NULL)
-      return lexer_.Error("unknown pool name '" + pool_name + "'", err);
+    if (pool == NULL) {
+		return lexer_.Error("unknown pool name '"+pool_name+"'", err)
+	}
     edge.pool_ = pool;
   }
 
   edge.outputs_.reserve(outs_.size());
   for (size_t i = 0, e = outs_.size(); i != e; ++i) {
-    string path = outs_[i].Evaluate(env);
-    if (path.empty())
-      return lexer_.Error("empty path", err);
+     path := outs_[i].Evaluate(env);
+    if (path.empty()) {
+		return lexer_.Error("empty path", err)
+	}
     uint64_t slash_bits;
     CanonicalizePath(&path, &slash_bits);
     if (!state_.AddOut(edge, path, slash_bits, err)) {
@@ -341,8 +366,9 @@ func (this *ManifestParser) ParseEdge(err string) bool                          
   edge.inputs_.reserve(ins_.size());
   for (vector<EvalString>::iterator i = ins_.begin(); i != ins_.end(); ++i) {
     string path = i.Evaluate(env);
-    if (path.empty())
-      return lexer_.Error("empty path", err);
+    if (path.empty()) {
+		return lexer_.Error("empty path", err)
+	}
     uint64_t slash_bits;
     CanonicalizePath(&path, &slash_bits);
     state_.AddIn(edge, path, slash_bits);
@@ -354,8 +380,9 @@ func (this *ManifestParser) ParseEdge(err string) bool                          
   for (std::vector<EvalString>::iterator v = validations_.begin();
       v != validations_.end(); ++v) {
     string path = v.Evaluate(env);
-    if (path.empty())
-      return lexer_.Error("empty path", err);
+    if (path.empty()) {
+		return lexer_.Error("empty path", err)
+	}
     uint64_t slash_bits;
     CanonicalizePath(&path, &slash_bits);
     state_.AddValidation(edge, path, slash_bits);
@@ -383,7 +410,7 @@ func (this *ManifestParser) ParseEdge(err string) bool                          
   // Lookup, validate, and save any dyndep binding.  It will be used later
   // to load generated dependency information dynamically, but it must
   // be one of our manifest-specified inputs.
-  string dyndep = edge.GetUnescapedDyndep();
+  dyndep := edge.GetUnescapedDyndep();
   if (!dyndep.empty()) {
     uint64_t slash_bits;
     CanonicalizePath(&dyndep, &slash_bits);
@@ -403,8 +430,9 @@ func (this *ManifestParser) ParseDefault(err string) bool                       
   EvalString eval;
   if (!lexer_.ReadPath(&eval, err))
     return false;
-  if (eval.empty())
-    return lexer_.Error("expected target name", err);
+  if (eval.empty()) {
+	  return lexer_.Error("expected target name", err)
+  }
 
   do {
     string path = eval.Evaluate(env_);
@@ -427,8 +455,9 @@ func (this *ManifestParser) ParseDefault(err string) bool                       
 // / Parse either a 'subninja' or 'include' line.
 func (this *ManifestParser) ParseFileInclude(new_scope bool, err string) bool {
   EvalString eval;
-  if (!lexer_.ReadPath(&eval, err))
-    return false;
+  if (!lexer_.ReadPath(&eval, err)) {
+	  return false
+  }
   string path = eval.Evaluate(env_);
 
   if (subparser_ == nullptr) {
@@ -440,11 +469,13 @@ func (this *ManifestParser) ParseFileInclude(new_scope bool, err string) bool {
     subparser_.env_ = env_;
   }
 
-  if (!subparser_.Load(path, err, &lexer_))
-    return false;
+  if (!subparser_.Load(path, err, &lexer_)) {
+	  return false
+  }
 
-  if (!ExpectToken(Lexer::NEWLINE, err))
-    return false;
+  if (!ExpectToken(Lexer::NEWLINE, err)){
+	return false;
+  }
 
   return true;
 }

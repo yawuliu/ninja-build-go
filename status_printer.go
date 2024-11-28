@@ -1,5 +1,7 @@
 package main
 
+import "time"
+
 type SlidingRateInfo struct {
 	rate_        float64
 	N            int
@@ -19,20 +21,25 @@ func (this *SlidingRateInfo) rate() float64 {
 	return this.rate_
 }
 
-func (this *SlidingRateInfo) UpdateRate(update_hint int, time_millis int64) {
-	if update_hint == this.last_update_ {
+func (s *SlidingRateInfo) UpdateRate(update_hint int, time_millis int64) {
+	if update_hint == s.last_update_ {
 		return
 	}
+	s.last_update_ = update_hint
 
-	this.last_update_ = update_hint
-
-	if this.times_.size() == this.N {
-		this.times_.pop()
+	if len(s.times_) == s.N {
+		// 移除最旧的时间
+		s.times_ = s.times_[1:]
 	}
-	this.times_.push(time_millis)
+	// 添加新的时间
+	s.times_ = append(s.times_, float64(time_millis))
 
-	if this.times_.back() != this.times_.front() {
-		this.rate_ = this.times_.size() / ((this.times_.back() - this.times_.front()) / 1e3)
+	// 计算速率
+	if len(s.times_) > 1 {
+		interval := time.Duration(s.times_[len(s.times_)-1]-s.times_[0]) * time.Millisecond
+		s.rate_ = float64(len(s.times_)) / interval.Seconds()
+	} else {
+		s.rate_ = -1
 	}
 }
 

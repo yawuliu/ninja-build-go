@@ -31,38 +31,112 @@ type Lexer struct {
 	last_token_ Token
 }
 
-func NewLexer0() *Lexer {}
+func NewLexer0() *Lexer {
+	ret := Lexer{}
+	return &ret
+}
 
 // / Helper ctor useful for tests.
-func NewLexer(input string) *Lexer {}
+func NewLexer(input string) *Lexer {
+	ret := Lexer{}
+	ret.Start("input", input)
+	return &ret
+}
 
 // / Skip past whitespace (called after each read token/ident/etc.).
-func (this *Lexer) EatWhitespace() {}
+func (this *Lexer) EatWhitespace() {
+
+}
 
 // / Read a $-escaped string.
 func ReadEvalString(eval *EvalString, path bool, err *string) bool {}
 
 // / Return a human-readable form of a token, used in error messages.
-func TokenName(t Token) string {}
+func TokenName(t Token) string {
+	switch t {
+	case ERROR:
+		return "lexing error"
+	case BUILD:
+		return "'build'"
+	case COLON:
+		return "':'"
+	case DEFAULT:
+		return "'default'"
+	case EQUALS:
+		return "'='"
+	case IDENT:
+		return "identifier"
+	case INCLUDE:
+		return "'include'"
+	case INDENT:
+		return "indent"
+	case NEWLINE:
+		return "newline"
+	case PIPE2:
+		return "'||'"
+	case PIPE:
+		return "'|'"
+	case PIPEAT:
+		return "'|@'"
+	case POOL:
+		return "'pool'"
+	case RULE:
+		return "'rule'"
+	case SUBNINJA:
+		return "'subninja'"
+	case TEOF:
+		return "eof"
+	}
+	return "" // not reached
+}
 
 // / Return a human-readable token hint, used in error messages.
-func TokenErrorHint(expected Token) string {}
+func TokenErrorHint(expected Token) string {
+	switch expected {
+	case COLON:
+		return " ($ also escapes ':')"
+	default:
+		return ""
+	}
+}
 
 // / If the last token read was an ERROR token, provide more info
 // / or the empty string.
-func (this *Lexer) DescribeLastError() string {}
+func (this *Lexer) DescribeLastError() string {
+	if this.last_token_ {
+		switch this.last_token_[0] {
+		case '\t':
+			return "tabs are not allowed, use spaces"
+		}
+	}
+	return "lexing error"
+}
 
 // / Start parsing some input.
-func (this *Lexer) Start(filename, input string) {}
+func (this *Lexer) Start(filename, input string) {
+	this.filename_ = filename
+	this.input_ = input
+	this.ofs_ = this.input_
+	this.last_token_ = nil
+}
 
 // / Read a Token from the Token enum.
 func (this *Lexer) ReadToken() Token {}
 
 // / Rewind to the last read Token.
-func (this *Lexer) UnreadToken() {}
+func (this *Lexer) UnreadToken() {
+	this.ofs_ = this.last_token_
+}
 
 // / If the next token is \a token, read it and return true.
-func (this *Lexer) PeekToken(token Token) bool {}
+func (this *Lexer) PeekToken(token Token) bool {
+	t := this.ReadToken()
+	if t == token {
+		return true
+	}
+	this.UnreadToken()
+	return false
+}
 
 // / Read a simple identifier (a rule or variable name).
 // / Returns false if a name can't be read.

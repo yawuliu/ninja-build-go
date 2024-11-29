@@ -44,7 +44,7 @@ type Builder struct {
 	disk_interface_ DiskInterface
 
 	// Only create an Explanations class if '-d explain' is used.
-	explanations_ *Explanations
+	explanations_ Explanations
 
 	scan_ DependencyScan
 }

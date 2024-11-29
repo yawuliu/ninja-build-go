@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
+	"syscall"
 )
 
 // DiskInterface ---------------------------------------------------------------
@@ -52,27 +54,69 @@ func NewRealDiskInterface() *RealDiskInterface {
 }
 func (this *RealDiskInterface) ReleaseRealDiskInterface() {}
 
-func  TimeStampFromFileTime(filetime *FILETIME) TimeStamp{
-	// FILETIME is in 100-nanosecond increments since the Windows epoch.
-	// We don't much care about epoch correctness but we do want the
-	// resulting value to fit in a 64-bit integer.
-	mtime := ((uint64)filetime.dwHighDateTime << 32) | ((uint64_t)filetime.dwLowDateTime)
-	// 1600 epoch . 2000 epoch (subtract 400 years).
-	return TimeStamp(mtime) - 12622770400LL * (1000000000LL / 100)
+func  TimeStampFromFileTime(filetime syscall.Filetime) TimeStamp {
+	// FILETIME 是自 1601 年以来的 100 纳秒间隔
+	// Unix 时间戳是自 1970 年以来的秒数
+	// 1601 年到 1970 年的秒数差
+	const windowsToUnixEpochDelta = int64((1600*365+89)*24*60*60) * 1000000000
+
+	// FILETIME 值是 100 纳秒间隔，转换为纳秒
+	nanoseconds := (int64(filetime.HighDateTime) << 32) + int64(filetime.LowDateTime)
+
+	// 将纳秒转换为 Unix 时间戳
+	unixNanoseconds := nanoseconds - windowsToUnixEpochDelta
+
+	// 创建 time.Time 结构
+	return TimeStamp(unixNanoseconds)
 }
 
 func StatSingleFile(path string,  err *string) TimeStamp {
-	WIN32_FILE_ATTRIBUTE_DATA attrs;
-	if (!GetFileAttributesExA(path.c_str(), GetFileExInfoStandard, &attrs)) {
-		 win_err := GetLastError();
-		if (win_err == ERROR_FILE_NOT_FOUND || win_err == ERROR_PATH_NOT_FOUND) {
-			return 0
+	fileInfo, err1 := os.Stat(path)
+	if err1 != nil {
+		if os.IsNotExist(err1) || os.IsPermission(err1) {
+			return 0 // 对应于 C++ 中的 ERROR_FILE_NOT_FOUND 或 ERROR_PATH_NOT_FOUND
 		}
-		*err = "GetFileAttributesEx(" + path + "): " + GetLastErrorString();
-		return -1;
+		*err = fmt.Errorf("GetFileAttributesEx(%s): %v", path, err1).Error()
+		return -1
 	}
-	return TimeStampFromFileTime(attrs.ftLastWriteTime);
+	return TimeStampFromFileTime(fileInfo.Sys().(*syscall.Win32FileAttributeData).LastWriteTime)
 }
+
+// StatAllFilesInDir 遍历目录中的所有文件，并填充时间戳映射
+func StatAllFilesInDir(dir string, stamps map[string]TimeStamp) error {
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) || os.IsPermission(err) {
+			return nil // 对应于 C++ 中的 ERROR_FILE_NOT_FOUND 或 ERROR_PATH_NOT_FOUND
+		}
+		return fmt.Errorf("ReadDir(%s): %w", dir, err)
+	}
+
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+		if file.Name() == ".." {
+			// Skip ".." as it is not a file
+			continue
+		}
+
+		filePath := filepath.Join(dir, file.Name())
+		info, err := os.Stat(filePath)
+		if err != nil {
+			return fmt.Errorf("Stat(%s): %w", filePath, err)
+		}
+
+		// 转换文件名为小写
+		lowerName := strings.ToLower(file.Name())
+
+		// 将文件的最后写入时间添加到映射中
+		stamps[lowerName] = TimeStampFromFileTime(info.Sys().(*syscall.Win32FileAttributeData).LastWriteTime)
+	}
+
+	return nil
+}
+
 
 // / stat() a file, returning the mtime, or 0 if missing and -1 on
 // / other errors.
@@ -80,17 +124,24 @@ func (this *RealDiskInterface) Stat(path string, err *string) TimeStamp {
 	METRIC_RECORD("node stat");
   // MSDN: "Naming Files, Paths, and Namespaces"
   // http://msdn.microsoft.com/en-us/library/windows/desktop/aa365247(v=vs.85).aspx
-  if !path.empty() && !AreLongPathsEnabled() && path[0] != '\\' && path.size() > MAX_PATH {
-    fmt.Printf("Stat(%s): Filename longer than %d characters", path, MAX_PATH)
-    *err = err_stream.str();
+  if path!="" && !AreLongPathsEnabled() && path[0] != '\\' && len(path) > MAX_PATH {
+	tmp := ""
+	fmt.Sprintf(tmp, "Stat(%s): Filename longer than %d characters", path, MAX_PATH)
+    *err = tmp
     return -1;
   }
   if !this.use_cache_ {
 	  return StatSingleFile(path, err)
   }
 
-  dir := DirName(path);
-  base := (path.substr(dir.size() ? dir.size() + 1 : 0));
+  dir := DirName(path)
+	base := ""
+  if  len(dir) >0 {
+	  base =path[len(dir) + 1 :]
+  } else {
+	  base =path[0:]
+  }
+
   if (base == "..") {
     // StatAllFilesInDir does not report any information for base = "..".
     base = ".";
@@ -104,8 +155,8 @@ func (this *RealDiskInterface) Stat(path string, err *string) TimeStamp {
   ci := this.cache_.find(dir_lowercase);
   if (ci == this.cache_.end()) {
     ci = this.cache_.insert(make_pair(dir_lowercase, DirCache())).first;
-    if (!StatAllFilesInDir(dir.empty() ? "." : dir, &ci.second, err)) {
-      cache_.erase(ci);
+    if !StatAllFilesInDir(dir=="" ? "." : dir, &ci.second, err) {
+      this.cache_.erase(ci);
       return -1;
     }
   }
@@ -181,7 +232,7 @@ func (this *RealDiskInterface) RemoveFile(path string) int {
 func (this *RealDiskInterface) AllowStatCache(allow bool) {
 	this.use_cache_ = allow;
 	if !this.use_cache_ {
-		this.cache_.clear()
+		this.cache_ = map[string]DirCache{}
 	}
 }
 

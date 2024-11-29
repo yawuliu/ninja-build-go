@@ -14,15 +14,19 @@ type DepsLog struct {
 }
 
 type Deps struct {
-	mtime TimeStamp
+	mtime      TimeStamp
 	node_count int
-	nodes []*Node
+	nodes      []*Node
 }
 
-func NewDeps( mtime int64,  node_count int) *Deps {
+func NewDeps(mtime int64, node_count int) *Deps {
 	ret := Deps{}
-	mtime(mtime), node_count(node_count), nodes(new Node*[node_count])
+	ret.mtime = TimeStamp(mtime)
+	ret.node_count = node_count
+	ret.nodes = make([]*Node, node_count)
 	return &ret
 }
 
-func (this*Deps) ReleaseDeps() { delete [] nodes; }
+func (this *Deps) ReleaseDeps() {
+	this.nodes = []*Node{}
+}

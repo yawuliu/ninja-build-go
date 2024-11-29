@@ -177,7 +177,7 @@ func (this *EvalString) AddSpecial(text string) {
 		// onto the vector.
 		this.parsed_ = append(this.parsed_, TokenPair{key: this.single_token_, tp: RAW})
 	}
-	this.parsed_ = append(this.parsed_, TokenPair{key: text.AsString(), tp: SPECIAL})
+	this.parsed_ = append(this.parsed_, TokenPair{key: text, tp: SPECIAL})
 }
 
 // / Construct a human-readable representation of the parsed state,

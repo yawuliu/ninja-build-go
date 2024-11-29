@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -19,12 +20,30 @@ type Metrics struct {
 }
 
 func (this *Metrics) NewMetric(name string) *Metric {
-
+	metric := Metric{}
+	metric.name = name
+	metric.count = 0
+	metric.sum = 0
+	this.metrics_ = append(this.metrics_, &metric)
+	return &metric
 }
 
 // / Print a summary report to stdout.
 func (this *Metrics) Report() {
+	width := 0
+	for _, i := range this.metrics_ {
+		width = max(len(i.name), width)
+	}
 
+	fmt.Printf("%-*s\t%-6s\t%-9s\t%s\n", width,
+		"metric", "count", "avg (us)", "total (ms)")
+	for _, i := range this.metrics_ {
+		metric := i
+		micros := TimerToMicrosInt64(metric.sum)
+		total := micros / 1000
+		avg := micros / int64(metric.count)
+		fmt.Printf("%-*s\t%-6d\t%-8.1f\t%.1f\n", width, metric.name, metric.count, avg, total)
+	}
 }
 
 func NewStopwatch() *Stopwatch {

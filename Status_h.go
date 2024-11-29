@@ -11,7 +11,7 @@ type Status interface {
 	/// Set the Explanations instance to use to report explanations,
 	/// argument can be nullptr if no explanations need to be printed
 	/// (which is the default).
-	SetExplanations(*Explanations)
+	SetExplanations(Explanations)
 
 	Info(msg string, args ...interface{})
 	Warning(msg string, args ...interface{})

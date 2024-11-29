@@ -3,6 +3,9 @@ package main
 import (
 	"fmt"
 	"log"
+	"runtime"
+	"strings"
+	"github.com/ahrtr/gocontainer/queue/priorityqueue"
 )
 
 func NewNode(path string, slash_bits uint64) *Node {
@@ -13,8 +16,18 @@ func NewNode(path string, slash_bits uint64) *Node {
 }
 
 // / Return false on error.
-func (this *Node) Stat(disk_interface *DiskInterface, err *string) bool {
+func (this *Node) Stat(disk_interface DiskInterface, err *string) bool {
+	this.mtime_ = disk_interface.Stat(this.path_, err);
+	if this.mtime_ == -1 {
+		return false;
+	}
+	if this.mtime_ != 0 {
+		this.exists_ = ExistenceStatusExists
+	} else {
+		this.exists_ = ExistenceStatusMissing
+	}
 
+	return true;
 }
 
 // / If the file doesn't exist, set the mtime_ from its dependencies
@@ -60,7 +73,20 @@ func (this *Node) PathDecanonicalized() string {
 	return PathDecanonicalized(this.path_, this.slash_bits_)
 }
 func PathDecanonicalized(path string, slash_bits uint64) string {
-
+	result := path
+	if runtime.GOOS == "windows" {
+		mask := uint64(1)
+		for i := 0; i < len(result); {
+			if result[i] == '/' {
+				if slash_bits&mask != 0 {
+					result = strings.Replace(result, "/", "\\", 1)
+				}
+				mask <<= 1
+			}
+			i++
+		}
+	}
+	return result
 }
 func (this *Node) slash_bits() uint64 { return this.slash_bits_ }
 
@@ -94,19 +120,88 @@ func (this *Node) AddValidationOutEdge(edge *Edge) {
 	this.validation_out_edges_ = append(this.validation_out_edges_, edge)
 }
 
-func (this *Node) Dump(prefix string) {}
+func (this *Node) Dump(prefix string) {
+	fmt.Printf("%s <%s 0x%p> mtime: %" + PRId64 + "%s, (:%s), ",
+		prefix,
+		this.path(),
+		this,
+		this.mtime(),
+		func() string {
+			if this.exists() {
+				return ""
+			}
+			return " (:missing)"
+		}(),
+		func() string {
+			if this.dirty() {
+				return " dirty"
+			}
+			return " clean"
+		}())
+	if this.in_edge()!=nil {
+		this.in_edge().Dump("in-edge: ");
+	} else {
+		fmt.Printf("no in-edge\n");
+	}
+	fmt.Printf(" out edges:\n");
+	for _,e := range this.out_edges() {
+		e.Dump(" +- ")
+	}
+	if len(this.validation_out_edges())!=0 {
+		fmt.Printf(" validation out edges:\n");
+		for _, e := range this.validation_out_edges() {
+			e.Dump(" +- ")
+		}
+	}
+}
 
-func (this *InputsCollector) VisitNode(node *Node) {}
+func (this *InputsCollector) VisitNode(node *Node) {
+	edge := node.in_edge();
+
+	if edge==nil {  // A source file.
+		return;
+	}
+	// Add inputs of the producing edge to the result,
+	// except if they are themselves produced by a phony
+	// edge.
+	for _,input :=range edge.inputs_ {
+		if !this.visited_nodes_.insert(input).second {
+			continue
+		}
+
+		this.VisitNode(input);
+
+		input_edge := input.in_edge();
+		if !(input_edge!=nil && input_edge.is_phony()) {
+			this.inputs_ = append(this.inputs_, input)
+		}
+	}
+}
 
 // / Retrieve list of visited input nodes. A dependency always appears
 // / before its dependents in the result, but final order depends on the
 // / order of the VisitNode() calls performed before this.
-func (this *InputsCollector) inputs() []string { return this.inputs_ }
+func (this *InputsCollector) inputs() []*Node { return this.inputs_ }
 
 // / Same as inputs(), but returns the list of visited nodes as a list of
 // / strings, with optional shell escaping.
 func (this *InputsCollector) GetInputsAsStrings(shell_escape bool) []string {
-
+  result := make([]string, len(this.inputs_))
+  for _,input :=range  this.inputs_ {
+	unescaped := input.PathDecanonicalized();
+	if (shell_escape) {
+		path := ""
+			#ifdef _WIN32
+			GetWin32EscapedString(unescaped, &path);
+			#else
+			GetShellEscapedString(unescaped, &path);
+			#endif
+			result = append(result, path)
+		} else {
+		result = append(result, unescaped)
+		}
+	}
+	return result;
 }
 
 // / Reset collector state.
@@ -122,9 +217,8 @@ func NewEdge() *Edge {
 
 // / Return true if all inputs' in-edges are ready.
 func (this*Edge )AllInputsReady() bool {
-  for (vector<Node*>::const_iterator i = inputs_.begin();
-       i != inputs_.end(); ++i) {
-    if ((*i).in_edge() && !(*i).in_edge().outputs_ready()) {
+  for _,i := range this.inputs_ {
+    if i.in_edge()!=nil && !i.in_edge().outputs_ready() {
 		return false
 	}
   }
@@ -136,10 +230,10 @@ func (this*Edge )AllInputsReady() bool {
 /// If incl_rsp_file is enabled, the string will also contain the
 /// full contents of a response file (if applicable)
 func (this*Edge ) EvaluateCommand( incl_rsp_file bool) string {
-   command := GetBinding("command");
+   command := this.GetBinding("command");
   if (incl_rsp_file) {
-    rspfile_content := GetBinding("rspfile_content");
-    if (!rspfile_content.empty()) {
+    rspfile_content := this.GetBinding("rspfile_content");
+    if rspfile_content!="" {
 		command += ";rspfile=" + rspfile_content
 	}
   }
@@ -153,7 +247,7 @@ func (this*Edge ) GetBinding(key string) string {
 }
 
  func (this*Edge )  GetBindingBool(key string) bool {
-	   return !GetBinding(key).empty();
+	   return this.GetBinding(key) != ""
  }
 
 /// Like GetBinding("depfile"), but without shell escaping.
@@ -175,23 +269,22 @@ func (this*Edge )GetUnescapedRspfile()  string{
 
 func (this*Edge ) Dump(prefix string) {
 	fmt.Printf("%s[ ", prefix);
-  for (vector<Node*>::const_iterator i = inputs_.begin(); i != inputs_.end() && *i != NULL; ++i) {
-		fmt.Printf("%s ", (*i).path().c_str());
+  for _,i := range this.inputs_ {
+		fmt.Printf("%s ", (*i).path());
   }
-	fmt.Printf("--%s. ", rule_.name().c_str());
-  for (vector<Node*>::const_iterator i = outputs_.begin(); i != outputs_.end() && *i != NULL; ++i) {
-		fmt.Printf("%s ", (*i).path().c_str());
+	fmt.Printf("--%s. ", this.rule_.name());
+  for _,i := range this.outputs_ {
+		fmt.Printf("%s ", (*i).path());
   }
-  if (!validations_.empty()) {
+  if len(this.validations_)!=0 {
 	  fmt.Printf(" validations ");
-    for (std::vector<Node*>::const_iterator i = validations_.begin();
-         i != validations_.end() && *i != NULL; ++i) {
-		  fmt.Printf("%s ", (*i).path().c_str());
+    for _,i := range this.validations_ {
+		  fmt.Printf("%s ", i.path());
     }
   }
-  if (pool_) {
-    if (!pool_.name().empty()) {
-      fmt.Printf("(in pool '%s')", pool_.name().c_str());
+  if this.pool_!=nil {
+    if this.pool_.name()!="" {
+      fmt.Printf("(in pool '%s')", this.pool_.name())
     }
   } else {
 	  fmt.Printf("(null pool?)");
@@ -224,32 +317,36 @@ func (this*Edge ) is_implicit_out(index int64) bool {
 return index >= int64(len(this.outputs_) - this.implicit_outs_)
 }
 
+var kDefaultPool =NewPool("", 0)
+var kConsolePool = NewPool("console", 1)
+var kPhonyRule = NewRule("phony")
+
 func (this*Edge ) is_phony() bool {
-  return this.rule_ == &kPhonyRule;
+  return this.rule_ == kPhonyRule;
 }
 
 func (this*Edge ) use_console() bool {
-	  return pool() == &State::kConsolePool;
+	  return this.pool() == &kConsolePool;
 }
 
 func (this*Edge )  maybe_phonycycle_diagnostic() bool {
   // CMake 2.8.12.x and 3.0.x produced self-referencing phony rules
   // of the form "build a: phony ... a ...".   Restrict our
   // "phonycycle" diagnostic option to the form it used.
-  return is_phony() && outputs_.size() == 1 && implicit_outs_ == 0 &&
-      implicit_deps_ == 0;
+  return  this.is_phony() &&  len(this.outputs_) == 1 &&  this.implicit_outs_ == 0 &&
+      this.implicit_deps_ == 0;
 }
 
 
 
 
-func NewDependencyScan(state *State, build_log * BuildLog, deps_log *DepsLog, disk_interface *DiskInterface,
-	depfile_parser_options *DepfileParserOptions , explanations *Explanations) *DependencyScan {
+func NewDependencyScan(state *State, build_log * BuildLog, deps_log *DepsLog, disk_interface DiskInterface,
+	depfile_parser_options *DepfileParserOptions , explanations Explanations) *DependencyScan {
 	ret := DependencyScan{}
 	ret.build_log_ = build_log
 	ret.disk_interface_ = disk_interface
-	ret.dep_loader_ = (state, deps_log, disk_interface, depfile_parser_options, explanations)
-	ret.dyndep_loader_ = (state, disk_interface)
+	ret.dep_loader_ = NewImplicitDepLoader(state, deps_log, disk_interface, depfile_parser_options, explanations)
+	ret.dyndep_loader_ =  NewDyndepLoader(state, disk_interface, nil)
 	ret.explanations_ = explanations
 	return &ret
 }
@@ -262,9 +359,8 @@ func NewDependencyScan(state *State, build_log * BuildLog, deps_log *DepsLog, di
 /// Appends any validation nodes found to the nodes parameter.
 /// Returns false on failure.
 func (this*DependencyScan) RecomputeDirty(node *Node, validation_nodes []*Node, err *string) bool {
-  std::vector<Node*> stack;
-  std::vector<Node*> new_validation_nodes;
-
+  stack :=[]*Node{}
+  new_validation_nodes := []*Node{}
   std::deque<Node*> nodes(1, initial_node);
 
   // RecomputeNodeDirty might return new validation nodes that need to be
@@ -276,13 +372,15 @@ func (this*DependencyScan) RecomputeDirty(node *Node, validation_nodes []*Node, 
     stack.clear();
     new_validation_nodes.clear();
 
-    if (!RecomputeNodeDirty(node, &stack, &new_validation_nodes, err))
-      return false;
+    if (!this.RecomputeNodeDirty(node, stack, new_validation_nodes, err)) {
+		return false
+	}
     nodes.insert(nodes.end(), new_validation_nodes.begin(),
                               new_validation_nodes.end());
     if (!new_validation_nodes.empty()) {
-      assert(validation_nodes &&
-          "validations require RecomputeDirty to be called with validation_nodes");
+      if (validation_nodes==nil) {
+		  panic(" validations require RecomputeDirty to be called with validation_nodes")
+	  }
       validation_nodes.insert(validation_nodes.end(),
                            new_validation_nodes.begin(),
                            new_validation_nodes.end());
@@ -294,10 +392,10 @@ func (this*DependencyScan) RecomputeDirty(node *Node, validation_nodes []*Node, 
 
 /// Recompute whether any output of the edge is dirty, if so sets |*dirty|.
 /// Returns false on failure.
-func (this*DependencyScan)  RecomputeOutputsDirty(edge *Edge,  most_recent_input *Node, dirty *bool,  err *string) bool {
+func (this*DependencyScan)  RecomputeOutputsDirty(edge *Edge,  most_recent_input *Node, outputs_dirty *bool,  err *string) bool {
    command := edge.EvaluateCommand(/*incl_rsp_file=*/true);
-  for (vector<Node*>::iterator o = edge.outputs_.begin();o != edge.outputs_.end(); ++o) {
-    if (RecomputeOutputDirty(edge, most_recent_input, command, *o)) {
+  for _,o := range edge.outputs_ {
+    if this.RecomputeOutputDirty(edge, most_recent_input, command, o) {
       *outputs_dirty = true;
       return true;
     }
@@ -324,42 +422,42 @@ func (this*DependencyScan)  deps_log() * DepsLog{
 	  return this.dyndep_loader_.LoadDyndeps(node, err)
   }
 
-func (this*DependencyScan)  LoadDyndeps1(node *Node, ddf *DyndepFile, err *string) bool {
+func (this*DependencyScan)  LoadDyndeps1(node *Node, ddf DyndepFile, err *string) bool {
 	return this.dyndep_loader_.LoadDyndeps1(node, ddf, err)
 }
 
 func (this*DependencyScan)  RecomputeNodeDirty(node *Node, stack []*Node, validation_nodes []*Node, err *string)bool {
   edge := node.in_edge();
-  if (!edge) {
+  if edge == nil {
     // If we already visited this leaf node then we are done.
     if (node.status_known()) {
 		return true
 	}
     // This node has no in-edge; it is dirty if it is missing.
-    if (!node.StatIfNecessary(disk_interface_, err)) {
+    if (!node.StatIfNecessary(this.disk_interface_, err)) {
 		return false
 	}
     if (!node.exists()) {
-		explanations_.Record(node, "%s has no in-edge and is missing",
-			node.path().c_str())
+		this.explanations_.Record(node, "%s has no in-edge and is missing",
+			node.path())
 	}
     node.set_dirty(!node.exists());
     return true;
   }
 
   // If we already finished this edge then we are done.
-  if (edge.mark_ == Edge::VisitDone){
+  if edge.mark_ == VisitDone {
 		return true
 	}
 
   // If we encountered this edge earlier in the call stack we have a cycle.
-  if (!VerifyDAG(node, stack, err)) {
+  if (!this.VerifyDAG(node, stack, err)) {
 	  return false
   }
 
   // Mark the edge temporarily while in the call stack.
-  edge.mark_ = Edge::VisitInStack;
-  stack.push_back(node);
+  edge.mark_ = VisitInStack;
+  stack = append(stack, node)
 
    dirty := false;
   edge.outputs_ready_ = true;
@@ -377,15 +475,14 @@ func (this*DependencyScan)  RecomputeNodeDirty(node *Node, stack []*Node, valida
     //   input to this edge, the edge will not be considered ready below.
     //   Later during the build the dyndep file will become ready and be
     //   loaded to update this edge before it can possibly be scheduled.
-    if (edge.dyndep_ && edge.dyndep_.dyndep_pending()) {
-      if (!RecomputeNodeDirty(edge.dyndep_, stack, validation_nodes, err)) {
+    if edge.dyndep_!=nil && edge.dyndep_.dyndep_pending() {
+      if (!this.RecomputeNodeDirty(edge.dyndep_, stack, validation_nodes, err)) {
 		  return false
 	  }
 
-      if (!edge.dyndep_.in_edge() ||
-          edge.dyndep_.in_edge().outputs_ready()) {
+      if (edge.dyndep_.in_edge() == nil || edge.dyndep_.in_edge().outputs_ready()) {
         // The dyndep file is ready, so load it now.
-        if (!LoadDyndeps(edge.dyndep_, err)) {
+        if (!this.LoadDyndeps(edge.dyndep_, err)) {
 			return false
 		}
       }
@@ -393,9 +490,8 @@ func (this*DependencyScan)  RecomputeNodeDirty(node *Node, stack []*Node, valida
   }
 
   // Load output mtimes so we can compare them to the most recent input below.
-  for (vector<Node*>::iterator o = edge.outputs_.begin();
-       o != edge.outputs_.end(); ++o) {
-    if (!(*o).StatIfNecessary(disk_interface_, err)) {
+  for _,o := range edge.outputs_ {
+    if !o.StatIfNecessary(this.disk_interface_, err) {
 		return false
 	}
   }
@@ -403,13 +499,14 @@ func (this*DependencyScan)  RecomputeNodeDirty(node *Node, stack []*Node, valida
   if (!edge.deps_loaded_) {
     // This is our first encounter with this edge.  Load discovered deps.
     edge.deps_loaded_ = true;
-    if (!dep_loader_.LoadDeps(edge, err)) {
+    if !this.dep_loader_.LoadDeps(edge, err) {
       if (!err.empty()) {
 		  return false
 	  }
       // Failed to load dependency info: rebuild to regenerate it.
       // LoadDeps() did explanations_.Record() already, no need to do it here.
-      dirty = edge.deps_missing_ = true;
+	  edge.deps_missing_ = true
+      dirty = true;
     }
   }
 
@@ -422,12 +519,13 @@ func (this*DependencyScan)  RecomputeNodeDirty(node *Node, stack []*Node, valida
       edge.validations_.begin(), edge.validations_.end());
 
   // Visit all inputs; we're dirty if any of the inputs are dirty.
-  Node* most_recent_input = NULL;
+  var most_recent_input *Node = nil
   for (vector<Node*>::iterator i = edge.inputs_.begin();
        i != edge.inputs_.end(); ++i) {
     // Visit this input.
-    if (!RecomputeNodeDirty(*i, stack, validation_nodes, err))
-      return false;
+    if (!RecomputeNodeDirty(*i, stack, validation_nodes, err)) {
+		return false
+	}
 
     // If an input is not ready, neither are our outputs.
     if (Edge* in_edge = (*i).in_edge()) {
@@ -439,8 +537,8 @@ func (this*DependencyScan)  RecomputeNodeDirty(node *Node, stack []*Node, valida
     if (!edge.is_order_only(i - edge.inputs_.begin())) {
       // If a regular input is dirty (or missing), we're dirty.
       // Otherwise consider mtime.
-      if ((*i).dirty()) {
-        explanations_.Record(node, "%s is dirty", (*i).path().c_str());
+      if i.dirty() {
+		  this. explanations_.Record(node, "%s is dirty", (*i).path());
         dirty = true;
       } else {
         if (!most_recent_input || (*i).mtime() > most_recent_input.mtime()) {
@@ -453,15 +551,15 @@ func (this*DependencyScan)  RecomputeNodeDirty(node *Node, stack []*Node, valida
   // We may also be dirty due to output state: missing outputs, out of
   // date outputs, etc.  Visit all outputs and determine whether they're dirty.
   if (!dirty) {
-	  if !RecomputeOutputsDirty(edge, most_recent_input, &dirty, err) {
+	  if !this.RecomputeOutputsDirty(edge, most_recent_input, &dirty, err) {
 		  return false
 	  }
   }
 
   // Finally, visit each output and update their dirty state if necessary.
-  for (vector<Node*>::iterator o = edge.outputs_.begin();o != edge.outputs_.end(); ++o) {
+  for _,o := range edge.outputs_ {
     if (dirty) {
-		(*o).MarkDirty()
+		o.MarkDirty()
 	}
   }
 
@@ -528,15 +626,25 @@ func (this*DependencyScan)  VerifyDAG(node *Node, stack []*Node, err *string)boo
 
 /// Recompute whether a given single output should be marked dirty.
 /// Returns true if so.
-func (this*DependencyScan) RecomputeOutputDirty(edge *Edge, most_recent_input *Edge, command string,  output *Node)bool {
-  command := edge.EvaluateCommand(/*incl_rsp_file=*/true);
-  for (vector<Node*>::iterator o = edge.outputs_.begin(); o != edge.outputs_.end(); ++o) {
-    if (RecomputeOutputDirty(edge, most_recent_input, command, *o)) {
-      *outputs_dirty = true;
-      return true;
-    }
-  }
-  return true;
+func (this*DependencyScan) RecomputeOutputDirty(edge *Edge, most_recent_input *Node, command string,  output *Node)bool {
+	if (edge.is_phony()) {
+		// Phony edges don't write any output.  Outputs are only dirty if
+		// there are no inputs and we're missing the output.
+		if len(edge.inputs_)==0 && !output.exists() {
+			this.explanations_.Record(
+				output, "output %s of phony edge with no inputs doesn't exist",
+				output.path())
+			return true;
+		}
+
+		// Update the mtime with the newest input. Dependents can thus call mtime()
+		// on the fake node and get the latest mtime of the dependencies
+		if most_recent_input!=nil {
+			output.UpdatePhonyMtime(most_recent_input.mtime());
+		}
+
+		// Phony edges are clean, nothing to do
+		return false;
 }
 
 func (this*DependencyScan) RecordExplanation(node *Node, fmt string, args...interface{}) {}
@@ -566,13 +674,14 @@ func NewEdgeEnv(edge *Edge, escape EscapeKind) * EdgeEnv {
 }
 func (this* EdgeEnv ) LookupVariable(var1 string) string {
   if (var1 == "in" || var1 == "in_newline") {
-    explicit_deps_count := len(this.edge_.inputs_) - this.edge_.implicit_deps_ -
-		this.edge_.order_only_deps_;
-    return this.MakePathList(this.edge_.inputs_.data(), explicit_deps_count,
-                        var1 == "in" ? ' ' : '\n');
+	if var1 == "in" {
+		return this.MakePathList(this.edge_.inputs_, ' ');
+	} else {
+		return this.MakePathList(this.edge_.inputs_, '\n');
+	}
+
   } else if (var1 == "out") {
-    explicit_outs_count := len(this.edge_.outputs_) - this.edge_.implicit_outs_;
-    return this.MakePathList(&this.edge_.outputs_[0], explicit_outs_count, ' ');
+    return this.MakePathList(this.edge_.outputs_,  ' ');
   }
 
   // Technical note about the lookups_ vector.
@@ -591,13 +700,13 @@ func (this* EdgeEnv ) LookupVariable(var1 string) string {
   // Each variable definition can be seen as a node in a graph that looks
   // like the following:
   //
-  //   command --> foo
+  //   command -. foo
   //      |
   //      v
   //    var1 <-----.
   //      |        |
   //      v        |
-  //    var2 ---> var3
+  //    var2 --. var3
   //
   // The lookups_ vector is used as a stack of visited nodes/variables
   // during recursive expansion. Entering a node adds an item to the
@@ -609,7 +718,7 @@ func (this* EdgeEnv ) LookupVariable(var1 string) string {
   // at all.
   //
   if this.recursive_ {
-    it := std::find(lookups_.begin(), lookups_.end(), var);
+    it := std::find(this.lookups_.begin(), this.lookups_.end(), var1);
     if (it != this.lookups_.end()) {
       cycle := ""
       for (; it != this.lookups_.end(); ++it){
@@ -622,9 +731,9 @@ func (this* EdgeEnv ) LookupVariable(var1 string) string {
 
   // See notes on BindingEnv::LookupWithFallback.
   eval := this.edge_.rule_.GetBinding(var1);
-  record_varname := this.recursive_ && eval
-  if (record_varname) {
-	  this.lookups_.push_back(var1)
+  record_varname := this.recursive_ && eval!=nil
+  if record_varname {
+	  this.lookups_ = append(this.lookups_, var1)
   }
 
   // In practice, variables defined on rules never use another rule variable.
@@ -639,17 +748,20 @@ func (this* EdgeEnv ) LookupVariable(var1 string) string {
 
 /// Given a span of Nodes, construct a list of paths suitable for a command
 /// line.
-func (this* EdgeEnv )  MakePathList(span *Node,  size int64,  sep int32) string {
-  string result;
-  for (const Node* const* i = span; i != span + size; ++i) {
-    if (!result.empty())
-      result.push_back(sep);
-    const string& path = (*i).PathDecanonicalized();
-    if (escape_in_out_ == kShellEscape) {
+func (this* EdgeEnv )  MakePathList(spans []*Node, sep int32) string {
+  result := ""
+  for _, i := range spans {
+    if result != "" {
+		result += sep
+	}
+    path := i.PathDecanonicalized();
+    if escape_in_out_ == kShellEscape {
       GetWin32EscapedString(path, &result);
     } else {
-      result.append(path);
+      result+= path
     }
   }
   return result;
 }
+
+type EdgePriorityQueue priorityqueue.Interface

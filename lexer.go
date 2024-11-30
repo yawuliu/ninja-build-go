@@ -214,7 +214,7 @@ func (this*Lexer) ReadEvalString(eval *EvalString, path bool, err *string) bool 
 				goto yy102;
 			}
 			{
-				eval.AddText(StringPiece(start, p - start));
+				eval.AddText(string(start, p - start));
 				continue;
 			}
 		yy105:
@@ -226,7 +226,7 @@ func (this*Lexer) ReadEvalString(eval *EvalString, path bool, err *string) bool 
 				} else {
 					if (*start == '\n')
 					break;
-					eval.AddText(StringPiece(start, 1));
+					eval.AddText(string(start, 1));
 					continue;
 				}
 			}
@@ -310,13 +310,13 @@ func (this*Lexer) ReadEvalString(eval *EvalString, path bool, err *string) bool 
 		yy118:
 			++p;
 			{
-				eval.AddText(StringPiece(" ", 1));
+				eval.AddText(string(" ", 1));
 				continue;
 			}
 		yy120:
 			++p;
 			{
-				eval.AddText(StringPiece("$", 1));
+				eval.AddText(string("$", 1));
 				continue;
 			}
 		yy122:
@@ -325,13 +325,13 @@ func (this*Lexer) ReadEvalString(eval *EvalString, path bool, err *string) bool 
 				goto yy122;
 			}
 			{
-				eval.AddSpecial(StringPiece(start + 1, p - start - 1));
+				eval.AddSpecial(string(start + 1, p - start - 1));
 				continue;
 			}
 		yy125:
 			++p;
 			{
-				eval.AddText(StringPiece(":", 1));
+				eval.AddText(string(":", 1));
 				continue;
 			}
 		yy127:
@@ -361,7 +361,7 @@ func (this*Lexer) ReadEvalString(eval *EvalString, path bool, err *string) bool 
 		yy134:
 			++p;
 			{
-				eval.AddSpecial(StringPiece(start + 2, p - start - 3));
+				eval.AddSpecial(string(start + 2, p - start - 3));
 				continue;
 			}
 		}

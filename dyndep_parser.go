@@ -8,7 +8,7 @@ type DyndepParser struct {
 
 func NewDyndepParser(state *State, file_reader FileReader, dyndep_file DyndepFile) *DyndepParser {
 	ret := DyndepParser{}
-	ret.Parser = NewParser(state, file_reader)
+	ret.Parser = *NewParser(state, file_reader)
 	ret.dyndep_file_ = dyndep_file
 	return &ret
 }
@@ -113,7 +113,7 @@ func (this *DyndepParser) ParseEdge(err *string) bool                           
     edge := node.in_edge();
     res := DyndepFile::value_type(edge, Dyndeps())
     this.dyndep_file_[res] = true
-    if (!res) {
+    if res ==nil {
       return this.lexer_.Error("multiple statements for '"+path+"'", err)
     }
     dyndeps = &res.first.second;

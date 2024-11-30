@@ -446,13 +446,14 @@ func (this *DepsLog) RecordId(node *Node) bool {
 // / Should be called before using file_. When false is returned, errno will
 // / be set.
 func (this *DepsLog) OpenForWriteIfNeeded() bool {
-  if (this.file_path_.empty()) {
+  if this.file_path_=="" {
     return true;
   }
-	this.file_ = fopen(this.file_path_, "ab");
-  if this.file_==nil {
+  ff,err := os.OpenFile(this.file_path_, os.O_APPEND|os.O_CREATE|os.O_CREATE,0664)
+  if err!=nil {
     return false;
   }
+  this.file_ = ff
   // Set the buffer size to this and flush the file buffer after every record
   // to make sure records aren't written partially.
   if (setvbuf(this.file_, NULL, _IOFBF, kMaxRecordSize + 1) != 0) {
@@ -472,7 +473,8 @@ func (this *DepsLog) OpenForWriteIfNeeded() bool {
       return false;
     }
   }
-  if (fflush(this.file_) != 0) {
+	err1 := this.file_.Sync()
+  if err1!=nil {
     return false;
   }
 	this.file_path_ = ""

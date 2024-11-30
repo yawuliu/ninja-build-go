@@ -1,7 +1,6 @@
 package main
 
 import (
-  "github.com/ahrtr/gocontainer/queue"
   "github.com/ahrtr/gocontainer/set"
   "github.com/edwingeng/deque"
   "log"
@@ -429,15 +428,16 @@ func (this *Plan) UnmarkDependents(node  *Node,  dependents set.Interface){//map
      return false;
   }
 
-  if (edge.outputs_ready())
+  if (edge.outputs_ready()) {
     return false;  // Don't need to do anything.
-
+  }
   // If an entry in want_ does not already exist for edge, create an entry which
   // maps to kWantNothing, indicating that we do not want to build this entry itself.
-  want_ins := this.want_.insert(make_pair(edge, kWantNothing));
-  want := want_ins.first.second;
+  this.want_[edge] = kWantNothing
+  want_ins := kWantNothing
+  want := kWantNothing
 
-  if (dyndep_walk && want == kWantToFinish){
+  if dyndep_walk!=nil && want == kWantToFinish {
     return false;  // Don't need to do anything with already-scheduled edge.
   }
 
@@ -469,19 +469,19 @@ func (this *Plan) UnmarkDependents(node  *Node,  dependents set.Interface){//map
 // Must be called after ComputeCriticalPath and before FindWork
 func (this *Plan)   ScheduleInitialEdges(){
   // Add ready edges to queue.
-  if this.ready_.empty() {
+  if this.ready_.IsEmpty() {
     panic("ready_.empty()")
   }
  pools := set.New() // std::set<Pool*>
 
-  for _,it := range this.want_ {
-    edge := it.first;
-    want := it.second;
+  for first,second := range this.want_ {
+    edge := first;
+    want := second;
     if (want == kWantToStart && edge.AllInputsReady()) {
       pool := edge.pool();
       if (pool.ShouldDelayEdge()) {
         pool.DelayEdge(edge);
-        pools.insert(pool);
+        pools.Add(pool);
       } else {
         this.ScheduleWork(it);
       }
@@ -752,7 +752,7 @@ func (this*Builder)  Build(err *string) bool {
   // Second, we attempt to wait for / reap the next finished command.
   for this.plan_.more_to_do() {
     // See if we can start any more commands.
-    if failures_allowed {
+    if failures_allowed!=0 {
       capacity := this.command_runner_.CanRunMore();
       for capacity > 0 {
         edge := this.plan_.FindWork();
@@ -815,7 +815,7 @@ func (this*Builder)  Build(err *string) bool {
       }
 
       if !result.success() {
-        if failures_allowed {
+        if failures_allowed!=0 {
           failures_allowed--
         }
       }
@@ -852,7 +852,7 @@ func (this*Builder)  StartEdge(edge *Edge, err *string) bool {
   }
 
   start_time_millis := GetTimeMillis() - this.start_time_millis_;
-	this.running_edges_.insert(make_pair(edge, start_time_millis));
+	this.running_edges_[edge] = start_time_millis
 
   this.status_.BuildEdgeStarted(edge, start_time_millis);
 
@@ -1069,7 +1069,7 @@ func (this*Builder) ExtractDeps(result *Result, deps_type string, deps_prefix st
     }
 
     // XXX check depfile matches expected output.
-    deps_nodes.reserve(deps.ins_.size());
+    //deps_nodes.reserve(deps.ins_.size());
     for _,i :=range deps.ins_ {
       var slash_bits uint64 = 0
       CanonicalizePath(&i, &slash_bits);

@@ -119,7 +119,7 @@ type DependencyScan struct {
 	disk_interface_ DiskInterface
 	dep_loader_     *ImplicitDepLoader
 	dyndep_loader_  *DyndepLoader
-	explanations_   *OptionalExplanations
+	explanations_   Explanations
 }
 
 type ImplicitDepLoader struct {
@@ -243,7 +243,7 @@ func (this *ImplicitDepLoader) LoadDepFile(edge *Edge, path string, err *string)
 		}
 	}
 
-	return this.ProcessDepfileDeps(edge, &depfile.ins_, err)
+	return this.ProcessDepfileDeps(edge, depfile.ins_, err)
 }
 
 // / Load implicit dependencies for \a edge from the DepsLog.

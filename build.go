@@ -1,6 +1,7 @@
 package main
 
 import (
+  "fmt"
   "github.com/ahrtr/gocontainer/set"
   "github.com/edwingeng/deque"
   "log"
@@ -13,7 +14,7 @@ type Plan struct {
   /// we want for the edge.
   want_ map[*Edge]Want
 
-   ready_ EdgePriorityQueue
+  ready_ EdgePriorityQueue
 
   builder_ *Builder
   /// user provided targets in build order, earlier one have higher priority
@@ -39,17 +40,29 @@ func (p *Plan) AddTarget(target *Node, err *string) bool {
 }
 // Pop a ready edge off the queue of edges to build.
 // Returns NULL if there's no work to do.
-func (p *Plan) FindWork() *Edge {
-  // 实现查找工作的逻辑
-  return nil
+func (this *Plan) FindWork() *Edge {
+  if this.ready_.IsEmpty() {
+    return nil
+  }
+
+  work := this.ready_.top();
+  this.ready_.pop();
+  return work
 }
 /// Returns true if there's more work to be done.
 func (p *Plan) more_to_do() bool {
   return p.wanted_edges_ > 0 && p.command_edges_ > 0
 }
 /// Dumps the current state of the plan.
-func (p *Plan) Dump() {
-  // 实现计划转储的逻辑
+func (this *Plan) Dump() {
+  fmt.Printf("pending: %d\n", len(this.want_))
+  for first,second := range this.want_{
+    if second != kWantNothing {
+      fmt.Printf("want ")
+    }
+    first.Dump("")
+  }
+  fmt.Printf("ready: %d\n", this.ready_.Size())
 }
 type EdgeResult int8
 const (
@@ -218,7 +231,7 @@ func (this *Plan)  DyndepsLoaded(scan *DependencyScan, node *Node, ddf DyndepFil
   // Plan::NodeFinished would have without taking the dyndep code path).
   for _,oe :=range  node.out_edges(){
     want_e := this.want_.find(*oe);
-    if (want_e == want_.end()) {
+    if (want_e == this.want_.end()) {
       continue
     }
     dyndep_walk.insert(want_e.first);
@@ -250,7 +263,7 @@ const (
   kWantToFinish Want = 2
 )
 
-func (this *Plan)   ComputeCriticalPath(){
+func (this *Plan) ComputeCriticalPath(){
   METRIC_RECORD("ComputeCriticalPath");
 
   // Convenience class to perform a topological sort of all edges
@@ -282,21 +295,21 @@ func (this *Plan)   ComputeCriticalPath(){
   // Second propagate / increment weights from
   // children to parents. Scan the list
   // in reverse order to do so.
-  for reverse_it := sorted_edges.rbegin(); reverse_it != sorted_edges.rend(); reverse_it++ {
-    edge := *reverse_it;
+  for reverse_it := len(sorted_edges)-1; reverse_it  >=0 ; reverse_it-- {
+    edge := sorted_edges[reverse_it]
     edge_weight := edge.critical_path_weight();
 
     for _,input := range edge.inputs_ {
-    producer := input.in_edge();
-    if (!producer){
-    continue
-  }
-    producer_weight := producer.critical_path_weight();
-     candidate_weight := edge_weight + EdgeWeightHeuristic(producer);
-    if (candidate_weight > producer_weight){
-    producer.set_critical_path_weight(candidate_weight)
-  }
-  }
+      producer := input.in_edge();
+      if producer ==nil {
+        continue
+      }
+      producer_weight := producer.critical_path_weight();
+      candidate_weight := edge_weight + this.EdgeWeightHeuristic(producer);
+      if (candidate_weight > producer_weight){
+        producer.set_critical_path_weight(candidate_weight)
+      }
+    }
   }
 }
 

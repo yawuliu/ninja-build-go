@@ -6,6 +6,16 @@ import (
 	"os"
 )
 
+// The version is stored as 4 bytes after the signature and also serves as a
+// byte order mark. Signature and version combined are 16 bytes long.
+const  DepsLog_kFileSignature = "# ninjadeps\n"
+const  kFileSignatureSize = len(DepsLog_kFileSignature) - 1
+
+const  DepsLog_kCurrentVersion = 4
+
+const kMaxRecordSize = (1 << 19) - 1
+
+
 func NewDepsLog() *DepsLog {
 	ret := DepsLog{}
 	ret.needs_recompaction_ = false
@@ -31,6 +41,8 @@ func (this *DepsLog) OpenForWrite(path string, err *string) bool {
 	// so on the first write attempt
 	return true
 }
+
+
 func (this *DepsLog) RecordDeps(node *Node, mtime TimeStamp, nodes []*Node) bool {
   // Track whether there's any new data to be recorded.
  made_change := false
@@ -144,7 +156,7 @@ func (this *DepsLog) Load(path string, state *State, err *string) LoadStatus {
 		return LOAD_ERROR;
 	}
   valid_header := fread(buf, kFileSignatureSize, 1, f) == 1 &&
-                      !memcmp(buf, kFileSignature, kFileSignatureSize);
+                      !memcmp(buf, DepsLog_kFileSignature, kFileSignatureSize);
 
    version := int32(0)
   valid_version := fread(&version, 4, 1, f) == 1 && version == kCurrentVersion;
@@ -211,25 +223,26 @@ func (this *DepsLog) Load(path string, state *State, err *string) LoadStatus {
 break;
 	  }
 
-      Deps* deps = new Deps(mtime, deps_count);
-      for (int i = 0; i < deps_count; ++i) {
+      deps := NewDeps(mtime, deps_count)
+      for  i := 0; i < deps_count; i++ {
         deps.nodes[i] = nodes_[deps_data[i]];
       }
 
-      total_dep_record_count++;
-      if (!UpdateDeps(out_id, deps))
-        ++unique_dep_record_count;
+      total_dep_record_count++
+      if (!UpdateDeps(out_id, deps)){
+			unique_dep_record_count++
+	  }
     } else {
-      int path_size = size - 4;
+      path_size := size - 4;
       if (path_size <= 0) {
         read_failed = true;
         break;
       }
       // There can be up to 3 bytes of padding.
-      if (buf[path_size - 1] == '\0') {--path_size;}
-      if (buf[path_size - 1] == '\0') {--path_size;}
-      if (buf[path_size - 1] == '\0') {--path_size;}
-      StringPiece subpath(buf, path_size);
+      if (buf[path_size - 1] == '\0') {path_size--}
+      if (buf[path_size - 1] == '\0') {path_size--}
+      if (buf[path_size - 1] == '\0') {path_size--}
+       subpath := string(buf, path_size);
       // It is not necessary to pass in a correct slash_bits here. It will
       // either be a Node that's in the manifest (in which case it will already
       // have a correct slash_bits that GetNode will look up), or it is an
@@ -241,9 +254,9 @@ break;
       // happen if two ninja processes write to the same deps log concurrently.
       // (This uses unary complement to make the checksum look less like a
       // dependency record entry.)
-      unsigned checksum = *reinterpret_cast<unsigned*>(buf + size - 4);
-      int expected_id = ~checksum;
-      int id = nodes_.size();
+      checksum := *reinterpret_cast<unsigned*>(buf + size - 4);
+      expected_id := ~checksum;
+       id := nodes_.size();
       if (id != expected_id || node.id() >= 0) {
         read_failed = true;
         break;
@@ -263,8 +276,9 @@ break;
     }
     fclose(f);
 
-    if (!Truncate(path, offset, err))
-      return LOAD_ERROR;
+    if (!Truncate(path, offset, err)){
+return LOAD_ERROR;
+	}
 
     // The truncate succeeded; we'll just report the load error as a
     // warning because the build can proceed.
@@ -272,13 +286,12 @@ break;
     return LOAD_SUCCESS;
   }
 
-  fclose(f);
+f.Close()
 
   // Rebuild the log if there are too many dead records.
-  int kMinCompactionEntryCount = 1000;
-  int kCompactionRatio = 3;
-  if (total_dep_record_count > kMinCompactionEntryCount &&
-      total_dep_record_count > unique_dep_record_count * kCompactionRatio) {
+   kMinCompactionEntryCount := 1000;
+   kCompactionRatio := 3;
+  if (total_dep_record_count > kMinCompactionEntryCount &&  total_dep_record_count > unique_dep_record_count * kCompactionRatio) {
     needs_recompaction_ = true;
   }
 
@@ -433,7 +446,9 @@ func (this *DepsLog) RecordId(node *Node) bool {
   if (fwrite(&checksum, 4, 1, this.file_) < 1) {
 	  return false
   }
-  if (fflush(this.file_) != 0) {
+
+	err1 := this.file_.Sync()
+  if err1!=nil {
 	  return false
   }
 
@@ -466,10 +481,10 @@ func (this *DepsLog) OpenForWriteIfNeeded() bool {
   fseek(this.file_, 0, SEEK_END);
 
   if (ftell(this.file_) == 0) {
-    if (fwrite(kFileSignature, sizeof(kFileSignature) - 1, 1, this.file_) < 1) {
+    if (fwrite(DepsLog_kFileSignature, sizeof(kFileSignature) - 1, 1, this.file_) < 1) {
       return false;
     }
-    if (fwrite(&kCurrentVersion, 4, 1, this.file_) < 1) {
+    if (fwrite(&DepsLog_kCurrentVersion, 4, 1, this.file_) < 1) {
       return false;
     }
   }

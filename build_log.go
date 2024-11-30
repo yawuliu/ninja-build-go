@@ -45,8 +45,7 @@ func (this *BuildLog) RecordCommand(edge *Edge, start_time int, end_time int, mt
       log_entry = second;
     } else {
       log_entry = NewLogEntry(path);
-      item := Entries::value_type(log_entry.output, log_entry)
-      this.entries_[item] = true
+      this.entries_[log_entry.output] = log_entry
     }
     log_entry.command_hash = command_hash;
     log_entry.start_time = start_time;
@@ -170,7 +169,7 @@ func (this *BuildLog) Load(path string, err *string) LoadStatus {
       entry = i.second;
     } else {
       entry = NewLogEntry(output);
-      this.entries_.insert(Entries::value_type(entry.output, entry));
+      this.entries_[entry.output] = entry
       unique_entry_count++
     }
     total_entry_count++
@@ -179,8 +178,8 @@ func (this *BuildLog) Load(path string, err *string) LoadStatus {
     entry.end_time = end_time;
     entry.mtime = mtime;
     c := *end
-    *end = '\0';
-    entry.command_hash = (uint64_t)strtoull(start, NULL, 16);
+    *end = '\000';
+    entry.command_hash = strtoull(start, NULL, 16);
     *end = c;
   }
   file.Close()

@@ -77,139 +77,153 @@ func NewStatusPrinter(config *BuildConfig) *StatusPrinter {
 }
 
 // / Callbacks for the Plan to notify us about adding/removing Edge's.
-func (this *StatusPrinter) EdgeAddedToPlan(edge *Edge)     {
-  this.total_edges_++
+func (this *StatusPrinter) EdgeAddedToPlan(edge *Edge) {
+	this.total_edges_++
 
-  // Do we know how long did this edge take last time?
-  if (edge.prev_elapsed_time_millis != -1) {
-    this.eta_predictable_edges_total_++
-    this.eta_predictable_edges_remaining_++
-	  this.eta_predictable_cpu_time_total_millis_ += edge.prev_elapsed_time_millis;
-	  this.eta_predictable_cpu_time_remaining_millis_ +=
-        edge.prev_elapsed_time_millis;
-  } else {
-	  this.eta_unpredictable_edges_remaining_++
-  }
+	// Do we know how long did this edge take last time?
+	if edge.prev_elapsed_time_millis != -1 {
+		this.eta_predictable_edges_total_++
+		this.eta_predictable_edges_remaining_++
+		this.eta_predictable_cpu_time_total_millis_ += edge.prev_elapsed_time_millis
+		this.eta_predictable_cpu_time_remaining_millis_ +=
+			edge.prev_elapsed_time_millis
+	} else {
+		this.eta_unpredictable_edges_remaining_++
+	}
 }
 func (this *StatusPrinter) EdgeRemovedFromPlan(edge *Edge) {
-  this.total_edges_--
+	this.total_edges_--
 
-  // Do we know how long did this edge take last time?
-  if (edge.prev_elapsed_time_millis != -1) {
-    this.eta_predictable_edges_total_--
-    this.eta_predictable_edges_remaining_--
-	  this.eta_predictable_cpu_time_total_millis_ -= edge.prev_elapsed_time_millis;
-	  this.eta_predictable_cpu_time_remaining_millis_ -=
-        edge.prev_elapsed_time_millis;
-  } else {
-	 this.eta_unpredictable_edges_remaining_--
-  }
+	// Do we know how long did this edge take last time?
+	if edge.prev_elapsed_time_millis != -1 {
+		this.eta_predictable_edges_total_--
+		this.eta_predictable_edges_remaining_--
+		this.eta_predictable_cpu_time_total_millis_ -= edge.prev_elapsed_time_millis
+		this.eta_predictable_cpu_time_remaining_millis_ -=
+			edge.prev_elapsed_time_millis
+	} else {
+		this.eta_unpredictable_edges_remaining_--
+	}
 }
 
 func (this *StatusPrinter) BuildEdgeStarted(edge *Edge, start_time_millis int64) {
-  this.started_edges_++
-  this.running_edges_++
-  this.time_millis_ = start_time_millis;
+	this.started_edges_++
+	this.running_edges_++
+	this.time_millis_ = start_time_millis
 
-  if (edge.use_console() || this.printer_.is_smart_terminal()) {
-	  this.PrintStatus(edge, start_time_millis)
-  }
-
-  if (edge.use_console()) {
-	  this.printer_.SetConsoleLocked(true)
-  }
-}
-func (this *StatusPrinter) BuildEdgeFinished(edge *Edge, start_time_millis int64, end_time_millis int64, success bool, output string) {
-  this.time_millis_ = end_time_millis;
-  this.finished_edges_++
-
-  elapsed := end_time_millis - start_time_millis;
-  this.cpu_time_millis_ += elapsed;
-
-  // Do we know how long did this edge take last time?
-  if (edge.prev_elapsed_time_millis != -1) {
-    this.eta_predictable_edges_remaining_--
-	  this.eta_predictable_cpu_time_remaining_millis_ -=
-        edge.prev_elapsed_time_millis;
-  } else {
-	  this.eta_unpredictable_edges_remaining_--
-  }
-
-  if (edge.use_console()) {
-	  this.printer_.SetConsoleLocked(false)
-  }
-  if (this.config_.verbosity == QUIET) {
-	  return
-  }
-
-  if (!edge.use_console()) {
-	  this.PrintStatus(edge, end_time_millis)
-  }
-
-  this.running_edges_--
-
-  // Print the command that is spewing before printing its output.
-  if (!success) {
-    outputs := ""
-    for _,o := range edge.outputs_ {
-		outputs += o.path() + " ";
+	if edge.use_console() || this.printer_.is_smart_terminal() {
+		this.PrintStatus(edge, start_time_millis)
 	}
 
-    if (this.printer_.supports_color()) {
-		this.printer_.PrintOnNewLine("\x1B[31m" +  "FAILED: " + "\x1B[0m" + outputs + "\n");
-    } else {
-		this.printer_.PrintOnNewLine("FAILED: " + outputs + "\n");
-    }
-	  this.printer_.PrintOnNewLine(edge.EvaluateCommand(false) + "\n");
-  }
-
-  if output!="" {
-
-    // Fix extra CR being added on Windows, writing out CR CR LF (#773)
-	  os.Stdout.Sync()// Begin Windows extra CR fix
-     // _setmode(_fileno(stdout), _O_BINARY);
-
-    // ninja sets stdout and stderr of subprocesses to a pipe, to be able to
-    // check if the output is empty. Some compilers, e.g. clang, check
-    // isatty(stderr) to decide if they should print colored output.
-    // To make it possible to use colored output with ninja, subprocesses should
-    // be run with a flag that forces them to always print color escape codes.
-    // To make sure these escape codes don't show up in a file if ninja's output
-    // is piped to a file, ninja strips ansi escape codes again if it's not
-    // writing to a |smart_terminal_|.
-    // (Launching subprocesses in pseudo ttys doesn't work because there are
-    // only a few hundred available on some systems, and ninja can launch
-    // thousands of parallel compile commands.)
-    if (this.printer_.supports_color() || !strings.Contains(output, '\x1b')) {
-		  this.printer_.PrintOnNewLine(output);
-    } else {
-         final_output := StripAnsiEscapeCodes(output);
-		  this.printer_.PrintOnNewLine(final_output);
-    }
-
-
-    os.Stdout.Sync()
-	//  this._setmode(_fileno(stdout), _O_TEXT);  // End Windows extra CR fix
-  }
+	if edge.use_console() {
+		this.printer_.SetConsoleLocked(true)
+	}
 }
-func (this *StatusPrinter) BuildStarted()  {
-	this.started_edges_ = 0;
-	this.finished_edges_ = 0;
-	this.running_edges_ = 0;
+func (this *StatusPrinter) BuildEdgeFinished(edge *Edge, start_time_millis int64, end_time_millis int64, success bool, output string) {
+	this.time_millis_ = end_time_millis
+	this.finished_edges_++
+
+	elapsed := end_time_millis - start_time_millis
+	this.cpu_time_millis_ += elapsed
+
+	// Do we know how long did this edge take last time?
+	if edge.prev_elapsed_time_millis != -1 {
+		this.eta_predictable_edges_remaining_--
+		this.eta_predictable_cpu_time_remaining_millis_ -=
+			edge.prev_elapsed_time_millis
+	} else {
+		this.eta_unpredictable_edges_remaining_--
+	}
+
+	if edge.use_console() {
+		this.printer_.SetConsoleLocked(false)
+	}
+	if this.config_.verbosity == QUIET {
+		return
+	}
+
+	if !edge.use_console() {
+		this.PrintStatus(edge, end_time_millis)
+	}
+
+	this.running_edges_--
+
+	// Print the command that is spewing before printing its output.
+	if !success {
+		outputs := ""
+		for _, o := range edge.outputs_ {
+			outputs += o.path() + " "
+		}
+
+		if this.printer_.supports_color() {
+			this.printer_.PrintOnNewLine("\x1B[31m" + "FAILED: " + "\x1B[0m" + outputs + "\n")
+		} else {
+			this.printer_.PrintOnNewLine("FAILED: " + outputs + "\n")
+		}
+		this.printer_.PrintOnNewLine(edge.EvaluateCommand(false) + "\n")
+	}
+
+	if output != "" {
+
+		// Fix extra CR being added on Windows, writing out CR CR LF (#773)
+		os.Stdout.Sync() // Begin Windows extra CR fix
+		// _setmode(_fileno(stdout), _O_BINARY);
+
+		// ninja sets stdout and stderr of subprocesses to a pipe, to be able to
+		// check if the output is empty. Some compilers, e.g. clang, check
+		// isatty(stderr) to decide if they should print colored output.
+		// To make it possible to use colored output with ninja, subprocesses should
+		// be run with a flag that forces them to always print color escape codes.
+		// To make sure these escape codes don't show up in a file if ninja's output
+		// is piped to a file, ninja strips ansi escape codes again if it's not
+		// writing to a |smart_terminal_|.
+		// (Launching subprocesses in pseudo ttys doesn't work because there are
+		// only a few hundred available on some systems, and ninja can launch
+		// thousands of parallel compile commands.)
+		if this.printer_.supports_color() || !strings.Contains(output, string('\x1b')) {
+			this.printer_.PrintOnNewLine(output)
+		} else {
+			final_output := StripAnsiEscapeCodes(output)
+			this.printer_.PrintOnNewLine(final_output)
+		}
+
+		os.Stdout.Sync()
+		//  this._setmode(_fileno(stdout), _O_TEXT);  // End Windows extra CR fix
+	}
+}
+func (this *StatusPrinter) BuildStarted() {
+	this.started_edges_ = 0
+	this.finished_edges_ = 0
+	this.running_edges_ = 0
 }
 func (this *StatusPrinter) BuildFinished() {
-	this.printer_.SetConsoleLocked(false);
-	this.printer_.PrintOnNewLine("");
+	this.printer_.SetConsoleLocked(false)
+	this.printer_.PrintOnNewLine("")
 }
 
-func (this *StatusPrinter) Info(msg string, args ...interface{})    {
-	Info(msg, args);
+func (this *StatusPrinter) Info(msg string, args ...interface{}) {
+	Info(msg, args)
 }
 func (this *StatusPrinter) Warning(msg string, args ...interface{}) {
-	Warning(msg, args);
+	Warning(msg, args)
 }
-func (this *StatusPrinter) Error(msg string, args ...interface{})   {
-	Error(msg, args);
+func (this *StatusPrinter) Error(msg string, args ...interface{}) {
+	Error(msg, args)
+}
+
+func FORMAT_TIME_HMMSS(t int64) string {
+	return fmt.Sprintf("%"+PRId64+":%02"+PRId64+":%02"+PRId64+"", (t)/3600, ((t)%3600)/60, (t)%60)
+}
+
+func FORMAT_TIME_MMSS(t int64) string {
+	return fmt.Sprintf("%02"+PRId64+":%02"+PRId64+"", (t)/60, (t)%60)
+}
+func SnprintfRate(rate float64, format string) string {
+	if rate == -1 {
+		return fmt.Sprintf(format, "?")
+	} else {
+		return fmt.Sprintf(format, rate)
+	}
 }
 
 // / Format the progress status string by replacing the placeholders.
@@ -218,147 +232,128 @@ func (this *StatusPrinter) Error(msg string, args ...interface{})   {
 // / @param progress_status_format The format of the progress status.
 // / @param status The status of the edge.
 func (this *StatusPrinter) FormatProgressStatus(progress_status_format string, time_millis int64) string {
-  out := ""
-  char buf[32];
-  for s := progress_status_format; *s != '\0'; s++ {
-    if (*s == '%') {
-      s++
-      switch (*s) {
-      case '%':
-        out += '%'
-        break;
-
-        // Started edges.
-      case 's':
-        snprintf(buf, sizeof(buf), "%d", this.started_edges_);
-        out += buf;
-        break;
-
-        // Total edges.
-      case 't':
-        snprintf(buf, sizeof(buf), "%d", this.total_edges_);
-        out += buf;
-        break;
-
-        // Running edges.
-      case 'r': {
-        snprintf(buf, sizeof(buf), "%d", this.running_edges_);
-        out += buf;
-        break;
-      }
-
-        // Unstarted edges.
-      case 'u':
-        snprintf(buf, sizeof(buf), "%d", this.total_edges_ - this.started_edges_);
-        out += buf;
-        break;
-
-        // Finished edges.
-      case 'f':
-        snprintf(buf, sizeof(buf), "%d", finished_edges_);
-        out += buf;
-        break;
-
-        // Overall finished edges per second.
-      case 'o':
-        SnprintfRate(this.finished_edges_ / (this.time_millis_ / 1e3), buf, "%.1f");
-        out += buf;
-        break;
-
-        // Current rate, average over the last '-j' jobs.
-      case 'c':
-		  this.current_rate_.UpdateRate(this.finished_edges_, this.time_millis_);
-        SnprintfRate(this.current_rate_.rate(), buf, "%.1f");
-        out += buf;
-        break;
-
-        // Percentage of edges completed
-      case 'p': {
-        int percent = 0;
-        if (this.finished_edges_ != 0 && this.total_edges_ != 0) {
-			percent = (100 * this.finished_edges_) / this.total_edges_
+	out := ""
+	buf := ""
+	for i := 0; i < len(progress_status_format); i++ {
+		s := progress_status_format[i]
+		if s == '\000' {
+			break
 		}
-        snprintf(buf, sizeof(buf), "%3i%%", percent);
-        out += buf;
-        break;
-      }
+		if s == '%' {
+			s = progress_status_format[i+1]
+			switch s {
+			case '%':
+				out += string('%')
+				// Started edges.
+			case 's':
+				fmt.Sprintf(buf, "%d", this.started_edges_)
+				out += buf
+				// Total edges.
+			case 't':
+				fmt.Sprintf(buf, "%d", this.total_edges_)
+				out += buf
+				// Running edges.
+			case 'r':
+				{
+					fmt.Sprintf(buf, "%d", this.running_edges_)
+					out += buf
+				}
 
-#define FORMAT_TIME_HMMSS(t)                                                \
-  "%" PRId64 ":%02" PRId64 ":%02" PRId64 "", (t) / 3600, ((t) % 3600) / 60, \
-      (t) % 60
-#define FORMAT_TIME_MMSS(t) "%02" PRId64 ":%02" PRId64 "", (t) / 60, (t) % 60
+				// Unstarted edges.
+			case 'u':
+				fmt.Sprintf("%d", this.total_edges_-this.started_edges_)
+				out += buf
+				// Finished edges.
+			case 'f':
+				fmt.Sprintf("%d", this.finished_edges_)
+				out += buf
+				break
 
-        // Wall time
-      case 'e':  // elapsed, seconds
-      case 'w':  // elapsed, human-readable
-      case 'E':  // ETA, seconds
-      case 'W':  // ETA, human-readable
-      {
-        elapsed_sec := this.time_millis_ / 1e3;
-         eta_sec := -1;  // To be printed as "?".
-        if (this.time_predicted_percentage_ != 0.0) {
-          // So, we know that we've spent time_millis_ wall clock,
-          // and that is time_predicted_percentage_ percent.
-          // How much time will we need to complete 100%?
-          total_wall_time := this.time_millis_ / this.time_predicted_percentage_;
-          // Naturally, that gives us the time remaining.
-          eta_sec = (total_wall_time - this.time_millis_) / 1e3;
-        }
+				// Overall finished edges per second.
+			case 'o':
+				buf = SnprintfRate(float64(this.finished_edges_)/float64(this.time_millis_/1e3), "%.1f")
+				out += buf
+				// Current rate, average over the last '-j' jobs.
+			case 'c':
+				this.current_rate_.UpdateRate(this.finished_edges_, this.time_millis_)
+				buf = SnprintfRate(this.current_rate_.rate(), "%.1f")
+				out += buf
+				// Percentage of edges completed
+			case 'p':
+				{
+					percent := 0
+					if this.finished_edges_ != 0 && this.total_edges_ != 0 {
+						percent = (100 * this.finished_edges_) / this.total_edges_
+					}
+					fmt.Sprintf(buf, "%3i%%", percent)
+					out += buf
+				}
+				// Wall time
+			case 'e': // elapsed, seconds
+			case 'w': // elapsed, human-readable
+			case 'E': // ETA, seconds
+			case 'W': // ETA, human-readable
+				{
+					elapsed_sec := this.time_millis_ / 1e3
+					eta_sec := -1 // To be printed as "?".
+					if this.time_predicted_percentage_ != 0.0 {
+						// So, we know that we've spent time_millis_ wall clock,
+						// and that is time_predicted_percentage_ percent.
+						// How much time will we need to complete 100%?
+						total_wall_time := int64(float64(this.time_millis_) / this.time_predicted_percentage_)
+						// Naturally, that gives us the time remaining.
+						eta_sec = int((total_wall_time - this.time_millis_) / 1e3)
+					}
 
-        print_with_hours :=
-            elapsed_sec >= 60 * 60 || eta_sec >= 60 * 60;
+					print_with_hours :=
+						elapsed_sec >= 60*60 || eta_sec >= 60*60
 
-        sec := -1;
-        switch (*s) {
-        case 'e':  // elapsed, seconds
-        case 'w':  // elapsed, human-readable
-          sec = elapsed_sec;
-          break;
-        case 'E':  // ETA, seconds
-        case 'W':  // ETA, human-readable
-          sec = eta_sec;
-          break;
-        }
+					sec := -1
+					switch s {
+					case 'e', 'w': // elapsed, human-readable // elapsed, seconds
+						sec = int(elapsed_sec)
+					case 'E', 'W': // ETA, human-readable // ETA, seconds
+						sec = eta_sec
+					}
 
-        if (sec < 0) {
-			snprintf(buf, sizeof(buf), "?")
-		}else {
-          switch (*s) {
-          case 'e':  // elapsed, seconds
-          case 'E':  // ETA, seconds
-            snprintf(buf, sizeof(buf), "%.3f", sec);
-            break;
-          case 'w':  // elapsed, human-readable
-          case 'W':  // ETA, human-readable
-            if (print_with_hours)
-              snprintf(buf, sizeof(buf), FORMAT_TIME_HMMSS((int64_t)sec));
-            else
-              snprintf(buf, sizeof(buf), FORMAT_TIME_MMSS((int64_t)sec));
-            break;
-          }
-        }
-        out += buf;
-        break;
-      }
+					if sec < 0 {
+						fmt.Sprintf(buf, "?")
+					} else {
+						switch s {
+						// elapsed, seconds
+						case 'e', 'E': // ETA, seconds
+							fmt.Sprintf(buf, "%.3f", sec)
+							break
+							// elapsed, human-readable
+						case 'w', 'W': // ETA, human-readable
+							if print_with_hours {
+								fmt.Sprintf(buf, FORMAT_TIME_HMMSS(int64(sec)))
+							} else {
+								fmt.Sprintf(buf, FORMAT_TIME_MMSS(int64(sec)))
+							}
+						}
+					}
+					out += buf
+				}
 
-      // Percentage of time spent out of the predicted time total
-      case 'P': {
-        snprintf(buf, sizeof(buf), "%3i%%",
-                 (int)(100. * this.time_predicted_percentage_));
-        out += buf;
-        break;
-      }
+			// Percentage of time spent out of the predicted time total
+			case 'P':
+				{
+					fmt.Sprintf(buf, "%3i%%",
+						(int)(100.*this.time_predicted_percentage_))
+					out += buf
+				}
 
-      default:
-        log.Fatalf("unknown placeholder '%%%c' in $NINJA_STATUS", *s);
-        return "";
-      }
-    } else {
-      out += s
-    }
-  }
+			default:
+				log.Fatalf("unknown placeholder '%%%c' in $NINJA_STATUS", s)
+				return ""
+			}
+		} else {
+			out += string(s)
+		}
+	}
 
-  return out;
+	return out
 }
 
 // / Set the |explanations_| pointer. Used to implement `-d explain`.
@@ -367,41 +362,41 @@ func (this *StatusPrinter) SetExplanations(explanations Explanations) {
 }
 
 func (this *StatusPrinter) PrintStatus(edge *Edge, time_millis int64) {
-  if this.explanations_!=nil {
-    // Collect all explanations for the current edge's outputs.
-    explanations := []string{}
-    for _,output :=range edge.outputs_ {
-		  this.explanations_.LookupAndAppend(output, &explanations);
-    }
-    if len(explanations)!=0 {
-      // Start a new line so that the first explanation does not append to the
-      // status line.
-		this.printer_.PrintOnNewLine("");
-      for _,exp :=range explanations {
-        fmt.Fprintf(os.Stderr, "ninja explain: %s\n", exp)
-      }
-    }
-  }
+	if this.explanations_ != nil {
+		// Collect all explanations for the current edge's outputs.
+		explanations := []string{}
+		for _, output := range edge.outputs_ {
+			this.explanations_.LookupAndAppend(output, explanations)
+		}
+		if len(explanations) != 0 {
+			// Start a new line so that the first explanation does not append to the
+			// status line.
+			this.printer_.PrintOnNewLine("")
+			for _, exp := range explanations {
+				fmt.Fprintf(os.Stderr, "ninja explain: %s\n", exp)
+			}
+		}
+	}
 
-  if this.config_.verbosity == QUIET  || this.config_.verbosity == NO_STATUS_UPDATE {
-	return;
-  }
+	if this.config_.verbosity == QUIET || this.config_.verbosity == NO_STATUS_UPDATE {
+		return
+	}
 
-	this.RecalculateProgressPrediction();
+	this.RecalculateProgressPrediction()
 
-  force_full_command := this.config_.verbosity == VERBOSE;
+	force_full_command := this.config_.verbosity == VERBOSE
 
-   to_print := edge.GetBinding("description");
-  if to_print=="" || force_full_command {
-	  to_print = edge.GetBinding("command")
-  }
+	to_print := edge.GetBinding("description")
+	if to_print == "" || force_full_command {
+		to_print = edge.GetBinding("command")
+	}
 
-  to_print = this.FormatProgressStatus(this.progress_status_format_, time_millis) + to_print;
- if force_full_command{
-	 this.printer_.Print(to_print,  FULL )
- }else{
-	 this.printer_.Print(to_print,   ELIDE)
- }
+	to_print = this.FormatProgressStatus(this.progress_status_format_, time_millis) + to_print
+	if force_full_command {
+		this.printer_.Print(to_print, FULL)
+	} else {
+		this.printer_.Print(to_print, ELIDE)
+	}
 
 }
 

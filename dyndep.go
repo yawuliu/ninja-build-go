@@ -3,7 +3,7 @@ package main
 type DyndepLoader struct {
 	state_          *State
 	disk_interface_ DiskInterface
-	explanations_   *OptionalExplanations
+	explanations_   Explanations
 }
 
 func NewDyndepLoader(state *State, disk_interface DiskInterface, explanations Explanations) *DyndepLoader {
@@ -50,7 +50,7 @@ func (this *DyndepLoader) LoadDyndeps1(node *Node, ddf DyndepFile, err *string) 
 
 		ddi_second.used_ = true
 		dyndeps := ddi_second
-		if !this.UpdateEdge(edge, &dyndeps, err) {
+		if !this.UpdateEdge(edge, dyndeps, err) {
 			return false
 		}
 	}
@@ -108,7 +108,7 @@ func (this *DyndepLoader) UpdateEdge(edge *Edge, dyndeps *Dyndeps, err *string) 
 	return true
 }
 
-type DyndepFile map[*Edge]Dyndeps
+type DyndepFile map[*Edge]*Dyndeps
 
 type Dyndeps struct {
 	used_             bool

@@ -1,5 +1,7 @@
 package main
 
+import "fmt"
+
 // Token 是一个枚举，表示 lexer 可以识别的不同类型的 tokens。
 type Token int
 
@@ -46,7 +48,7 @@ func NewLexer(input string) *Lexer {
 // / Skip past whitespace (called after each read token/ident/etc.).
 func (this *Lexer) EatWhitespace() {
   p := this.ofs_;
-  const char* q;
+  q := ""
   for {
     this.ofs_ = p;
     
@@ -86,7 +88,7 @@ func (this *Lexer) EatWhitespace() {
 		  0,   0,   0,   0,   0,   0,   0,   0, 
 		  0,   0,   0,   0,   0,   0,   0,   0, 
 	};
-	yych = *p;
+	yych = p;
 	if (yybm[0+yych] & 128) {
 		goto yy81;
 	}
@@ -98,10 +100,10 @@ func (this *Lexer) EatWhitespace() {
 	}
 	goto yy79;
 yy77:
-	++p;
+	p++
 	{ break; }
 yy79:
-	++p;
+	p++
 yy80:
 	{ break; }
 yy81:
@@ -120,7 +122,7 @@ yy84:
 	}
 	goto yy80;
 yy85:
-	++p;
+	p++
 	{ continue; }
 yy87:
 	yych = *++p;
@@ -130,7 +132,7 @@ yy87:
 	p = q;
 	goto yy80;
 yy89:
-	++p;
+	p++
 	{ continue; }
 }
 
@@ -140,8 +142,8 @@ yy89:
 // / Read a $-escaped string.
 func (this*Lexer) ReadEvalString(eval *EvalString, path bool, err *string) bool {
 	p := this.ofs_;
-	const char* q;
-	const char* start;
+	q :=""
+	start:=""
 	for {
 		start = p;
 
@@ -181,7 +183,7 @@ func (this*Lexer) ReadEvalString(eval *EvalString, path bool, err *string) bool 
 				16,  16,  16,  16,  16,  16,  16,  16,
 				16,  16,  16,  16,  16,  16,  16,  16,
 		};
-			yych = *p;
+			yych = p;
 			if (yybm[0+yych] & 16) {
 				goto yy102;
 			}
@@ -218,14 +220,15 @@ func (this*Lexer) ReadEvalString(eval *EvalString, path bool, err *string) bool 
 				continue;
 			}
 		yy105:
-			++p;
+			p++
 			{
 				if (path) {
 					p = start;
 					break;
 				} else {
-					if (*start == '\n')
-					break;
+					if (*start == '\n') {
+						break
+					}
 					eval.AddText(string(start, 1));
 					continue;
 				}
@@ -279,7 +282,7 @@ func (this*Lexer) ReadEvalString(eval *EvalString, path bool, err *string) bool 
 				}
 			}
 		yy110:
-			++p;
+			p++
 			{
 				if (path) {
 					p = start
@@ -287,7 +290,7 @@ func (this*Lexer) ReadEvalString(eval *EvalString, path bool, err *string) bool 
 				break;
 			}
 		yy112:
-			++p;
+			p++
 		yy113:
 			{
 				this.last_token_ = start;
@@ -308,13 +311,13 @@ func (this*Lexer) ReadEvalString(eval *EvalString, path bool, err *string) bool 
 			}
 			goto yy113;
 		yy118:
-			++p;
+			p++
 			{
 				eval.AddText(string(" ", 1));
 				continue;
 			}
 		yy120:
-			++p;
+			p++
 			{
 				eval.AddText(string("$", 1));
 				continue;
@@ -329,7 +332,7 @@ func (this*Lexer) ReadEvalString(eval *EvalString, path bool, err *string) bool 
 				continue;
 			}
 		yy125:
-			++p;
+			p++
 			{
 				eval.AddText(string(":", 1));
 				continue;
@@ -359,7 +362,7 @@ func (this*Lexer) ReadEvalString(eval *EvalString, path bool, err *string) bool 
 			p = q;
 			goto yy113;
 		yy134:
-			++p;
+			p++
 			{
 				eval.AddSpecial(string(start + 2, p - start - 3));
 				continue;
@@ -467,7 +470,7 @@ func (this *Lexer) PeekToken(token Token) bool {
 // / Returns false if a name can't be read.
 func (this *Lexer) ReadIdent(out *string) bool {
   p := this.ofs_;
-  const char* start;
+  start := ""
   for {
     start = p;
     
@@ -507,11 +510,11 @@ func (this *Lexer) ReadIdent(out *string) bool {
 		  0,   0,   0,   0,   0,   0,   0,   0, 
 		  0,   0,   0,   0,   0,   0,   0,   0, 
 	};
-	yych = *p;
+	yych = p;
 	if (yybm[0+yych] & 128) {
 		goto yy95;
 	}
-	++p;
+	p++
 	{
       this.last_token_ = start;
       return false;
@@ -552,22 +555,24 @@ func (this *Lexer) Error(message string, err *string) bool {
   // Compute line/column.
   line := 1;
   line_start := this.input_
-  for (const char* p = this.input_; p < this.last_token_; p++) {
-    if (*p == '\n') {
+  for p := this.input_; p < this.last_token_; p++ {
+    if p == '\n' {
       line++
       line_start = p + 1;
     }
   }
-  col := this.last_token_ ? int(this.last_token_ - line_start) : 0;
-
-  buf := ""
-  snprintf(buf, sizeof(buf), "%s:%d: ", this.filename_, line);
+  col := 0;
+  if this.last_token_  {
+	  col =  int(this.last_token_ - line_start)
+  }
+	buf := ""
+	buf = fmt.Sprintf( "%s:%d: ", this.filename_, line);
   *err = buf;
   *err += message + "\n";
 
   // Add some context to the message.
   kTruncateColumn := 72;
-  if (col > 0 && col < kTruncateColumn) {
+  if col > 0 && col < kTruncateColumn {
     len:=0
     truncated := true;
     for len = 0; len < kTruncateColumn; len++ {

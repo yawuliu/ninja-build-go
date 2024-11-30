@@ -1,6 +1,9 @@
 package main
 
-import "github.com/ahrtr/gocontainer/set"
+import (
+	"github.com/ahrtr/gocontainer/set"
+	"strings"
+)
 
 type CLParser struct {
 	includes_ set.Interface // std::set<std::string>
@@ -11,15 +14,16 @@ type CLParser struct {
 // / Exposed for testing.
 func FilterShowIncludes(line string, deps_prefix string) string {
 	kDepsPrefixEnglish := "Note: including file: ";
-	const char* in = line.c_str();
-	const char* end = in + line.size();
+	 in := line
+	end := in + len(line)
 	prefix := deps_prefix.empty() ? kDepsPrefixEnglish : deps_prefix;
 	if (end - in > (int)prefix.size() &&
 		memcmp(in, prefix.c_str(), (int)prefix.size()) == 0) {
 		in += prefix.size();
-		while (*in == ' ')
-		++in;
-		return line.substr(in - line.c_str());
+		for (*in == ' ') {
+			in++
+		}
+		return line[in - line]
 	}
 	return "";
 }
@@ -40,11 +44,11 @@ func IsSystemInclude(path string) bool {
 func FilterInputFilename(line string) bool {
 	transform(line.begin(), line.end(), line.begin(), ToLowerASCII);
 	// TODO: other extensions, like .asm?
-	return EndsWith(line, ".c") ||
-		EndsWith(line, ".cc") ||
-		EndsWith(line, ".cxx") ||
-		EndsWith(line, ".cpp") ||
-		EndsWith(line, ".c++");
+	return strings.HasSuffix(line, ".c") ||
+		strings.HasSuffix(line, ".cc") ||
+		strings.HasSuffix(line, ".cxx") ||
+		strings.HasSuffix(line, ".cpp") ||
+		strings.HasSuffix(line, ".c++");
 }
 
 // / Parse the full output of cl, filling filtered_output with the text that
@@ -54,9 +58,11 @@ func (this *CLParser) Parse(output *string, deps_prefix string, filtered_output 
   METRIC_RECORD("CLParser::Parse");
 
   // Loop over all lines in the output to process them.
-  assert(&output != filtered_output);
-  size_t start = 0;
-  bool seen_show_includes = false;
+  if (&output != filtered_output) {
+	  panic("&output != filtered_output")
+  }
+  start := 0;
+  seen_show_includes := false;
   IncludesNormalize normalizer(".");
 
 
@@ -65,33 +71,33 @@ func (this *CLParser) Parse(output *string, deps_prefix string, filtered_output 
     if (end == string::npos){
 			end = output.size()
 		}
-    string line = output.substr(start, end - start);
+    line := output.substr(start, end - start);
 
-    string include = FilterShowIncludes(line, deps_prefix);
+    include := FilterShowIncludes(line, deps_prefix);
     if (!include.empty()) {
       seen_show_includes = true;
-      string normalized;
-      if (!normalizer.Normalize(include, &normalized, err)) {
+      normalized := ""
+      if (!this.normalizer.Normalize(include, &normalized, err)) {
 		  return false
 	  }
 
       if (!IsSystemInclude(normalized)) {
-		  includes_.insert(normalized)
+		  this.includes_.insert(normalized)
 	  }
     } else if (!seen_show_includes && FilterInputFilename(line)) {
       // Drop it.
       // TODO: if we support compiling multiple output files in a single
       // cl.exe invocation, we should stash the filename.
     } else {
-      filtered_output->append(line);
-      filtered_output->append("\n");
+      filtered_output.append(line);
+      filtered_output.append("\n");
     }
 
-    if (end < output.size() && output[end] == '\r') {
-		++end
+    if (end < len(*output) && output[end] == '\r') {
+		end++
 	}
-    if (end < output.size() && output[end] == '\n') {
-		++end
+    if (end < len(*output) && output[end] == '\n') {
+		end++
 	}
     start = end;
   }

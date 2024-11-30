@@ -19,7 +19,7 @@ func METRIC_RECORD(name string) {
 		metrics_h_metric = nil
 	}
 
-	metrics_h_scoped = ScopedMetric(metrics_h_metric)
+	// metrics_h_scoped = ScopedMetric(metrics_h_metric)
 }
 
 // / A variant of METRIC_RECORD that doesn't record anything if |condition|
@@ -30,9 +30,9 @@ func METRIC_RECORD_IF(name string, condition bool) {
 	} else {
 		metrics_h_metric = nil
 	}
-	if condition {
-		metrics_h_scoped = ScopedMetric(metrics_h_metric)
-	} else {
-		metrics_h_scoped = nil
-	}
+	//if condition {
+	//	metrics_h_scoped = ScopedMetric(metrics_h_metric)
+	//} else {
+	//	metrics_h_scoped = nil
+	//}
 }

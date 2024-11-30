@@ -747,11 +747,11 @@ func (this *EdgeEnv) LookupVariable(var1 string) string {
 
 // / Given a span of Nodes, construct a list of paths suitable for a command
 // / line.
-func (this *EdgeEnv) MakePathList(spans []*Node, sep int32) string {
+func (this *EdgeEnv) MakePathList(spans []*Node, sep uint8) string {
 	result := ""
 	for _, i := range spans {
 		if result != "" {
-			result += sep
+			result += string(sep)
 		}
 		path := i.PathDecanonicalized()
 		if this.escape_in_out_ == kShellEscape {

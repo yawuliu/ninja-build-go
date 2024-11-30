@@ -4,7 +4,7 @@ import "slices"
 
 type DepfileParser struct {
 	outs_    []string
-	ins_     []string
+	ins_     []*string
 	options_ *DepfileParserOptions
 }
 

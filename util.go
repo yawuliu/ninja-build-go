@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 func islatinalpha(c int) bool {
@@ -20,7 +21,7 @@ func StripAnsiEscapeCodes(in string) string {
 	for i := 0; i < len(in); i++ {
 		if in[i] != '\033' {
 			// Not an escape code.
-			stripped += in[i]
+			stripped += string(in[i])
 			continue
 		}
 
@@ -34,7 +35,7 @@ func StripAnsiEscapeCodes(in string) string {
 		i += 2
 
 		// Skip everything up to and including the next [a-zA-Z].
-		for i < len(in) && !islatinalpha(in[i]) {
+		for i < len(in) && !islatinalpha(int(in[i])) {
 			i++
 		}
 	}
@@ -112,4 +113,48 @@ const EXIT_FAILURE = 1
 
 func GetProcessorCount() int {
 	return runtime.NumCPU()
+}
+
+// StringNeedsWin32Escaping 检查字符串是否需要转义
+func StringNeedsWin32Escaping(input string) bool {
+	for _, c := range input {
+		if c == '"' || c == '\\' {
+			return true
+		}
+	}
+	return false
+}
+
+// GetWin32EscapedString 转义字符串以在Windows命令行中使用
+func GetWin32EscapedString(input string, result1 *string) {
+	if !StringNeedsWin32Escaping(input) {
+		*result1 = input
+		return
+	}
+
+	var result strings.Builder
+	const kQuote = '"'
+	const kBackslash = '\\'
+	result.WriteRune(kQuote)
+
+	var consecutiveBackslashCount int
+	spanBegin := 0
+
+	for i, c := range input {
+		switch c {
+		case kBackslash:
+			consecutiveBackslashCount++
+		case kQuote:
+			result.WriteString(input[spanBegin:i])
+			result.WriteString(strings.Repeat(string(kBackslash), consecutiveBackslashCount+1))
+			spanBegin = i
+			consecutiveBackslashCount = 0
+		default:
+			consecutiveBackslashCount = 0
+		}
+	}
+	result.WriteString(input[spanBegin:])
+	result.WriteString(strings.Repeat(string(kBackslash), consecutiveBackslashCount))
+	result.WriteRune(kQuote)
+	*result1 = result.String()
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 )
 
@@ -82,28 +83,34 @@ func (this *DepsLog) RecordDeps(node *Node, mtime TimeStamp, nodes []*Node) bool
     return false;
   }
   size |= 0x80000000;  // Deps record: set high bit.
-  if (fwrite(&size, 4, 1, this.file_) < 1) {
+	_,err1 := fmt.Fprintf(this.file_,"%d", size)
+  if err1!=nil {
 	  return false
   }
   id := node.id();
-  if (fwrite(&id, 4, 1, this.file_) < 1) {
+   _,err1 = fmt.Fprintf(this.file_,"%d", id)
+  if err1!=nil {
 	  return false
   }
-  mtime_part := uint32(mtime & 0xffffffff);
-  if (fwrite(&mtime_part, 4, 1, this.file_) < 1) {
+  mtime_part := uint32(mtime & 0xffffffff)
+  _,err1 = fmt.Fprintf(this.file_,"%d", mtime_part)
+  if err1!=nil {
 	  return false
   }
-  mtime_part := uint32((mtime >> 32) & 0xffffffff);
-  if (fwrite(&mtime_part, 4, 1, this.file_) < 1) {
+  mtime_part = uint32((mtime >> 32) & 0xffffffff);
+  _,err1 = fmt.Fprintf(this.file_,"%d", mtime_part)
+  if err1!=nil {
 	  return false
   }
   for i := 0; i < node_count; i++ {
     id = nodes[i].id();
-    if (fwrite(&id, 4, 1, this.file_) < 1) {
+	_,err1 := fmt.Fprintf(this.file_,"%d", id)
+    if err1!=nil {
 		return false
 	}
   }
-  if (fflush(this.file_) != 0) {
+  err1 = this.file_.Sync()
+  if err1!=nil {
 	  return false
   }
 
@@ -126,9 +133,9 @@ func (this *DepsLog) Close() {
 }
 
 func (this *DepsLog) Load(path string, state *State, err *string) LoadStatus {
-	METRIC_RECORD(".ninja_deps load");
-	char buf[kMaxRecordSize + 1];
-	f,err1 := os.OpenFile(path, "rb");
+	METRIC_RECORD(".ninja_deps load")
+	var buf string
+	f,err1 := os.Open(path)
 	if  err1!=nil {
 		if errors.Is(err1, os.ErrNotExist) {
 			return LOAD_NOT_FOUND
@@ -152,8 +159,8 @@ func (this *DepsLog) Load(path string, state *State, err *string) LoadStatus {
 	}else {
 		*err = "bad deps log signature or version; starting over"
 	}
-    fclose(f);
-    unlink(path)
+	f.Close()
+    os.RemoveAll(path)
     // Don't report this as a failure.  An empty deps log will cause
     // us to rebuild the outputs anyway.
     return LOAD_SUCCESS;

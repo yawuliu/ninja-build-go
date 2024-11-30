@@ -1,5 +1,7 @@
 package main
 
+import "slices"
+
 type DepfileParser struct {
 	outs_    []string
 	ins_     []string
@@ -19,26 +21,26 @@ func (this *DepfileParser) Parse(content, err *string) bool {
   // in: current parser input point.
   // end: end of input.
   // parsing_targets: whether we are parsing targets or dependencies.
-  char* in = &(*content)[0];
-  char* end = in + content.size();
+  in := &(*content)[0];
+  end := in + len(*content);
   have_target := false;
   parsing_targets := true;
   poisoned_input := false;
   is_empty := true;
-  while (in < end) {
+  for in < end {
     have_newline := false;
     // out: current output point (typically same as in, but can fall behind
     // as we de-escape backslashes).
-    char* out = in;
+    out := in;
     // filename: start of the current parsed filename.
-    char* filename = out;
+    filename := out;
     for  {
       // start: beginning of the current parsed span.
-      const char* start = in;
-      char* yymarker = NULL;
+      start := in;
+       yymarker := "";
       
     {
-      unsigned char yych;
+      yych := uint8(0)
       yybm := []uint8{
           0,   0,   0,   0,   0,   0,   0,   0, 
           0,   0,   0,   0,   0,   0,   0,   0, 
@@ -384,10 +386,9 @@ yy32:
 
     if (len > 0) {
       is_empty = false;
-       piece := string(filename, len);
+       piece := filename
       // If we've seen this as an input before, skip it.
-      pos := std::find(this.ins_.begin(), this.ins_.end(), piece);
-      if (pos == this.ins_.end()) {
+      if !slices.Contains(this.ins_, piece) {
         if (is_dependency) {
           if (poisoned_input) {
             *err = "inputs may not also have inputs";
@@ -397,8 +398,8 @@ yy32:
 			this.ins_ = append(this.ins_ , piece)
         } else {
           // Check for a new output.
-          if (std::find(this.outs_.begin(), this.outs_.end(), piece) == this.outs_.end()){
-				this.outs_ = append(this.outs_ , piece)
+          if !slices.Contains(this.outs_, piece) {
+			this.outs_ = append(this.outs_ , piece)
 		  }
         }
       } else if (!is_dependency) {

@@ -102,7 +102,7 @@ func Relativize(path string, start_list []string, err1 *string) string {
 // Return false if this function cannot check
 // whether or not on the same windows drive.
 func SameDriveFast(a, b string) bool {
-	if a.size() < 3 || b.size() < 3 {
+	if len(a) < 3 || len(b) < 3 {
 		return false
 	}
 
@@ -157,13 +157,14 @@ func (this *IncludesNormalize) Normalize(input string, result1 *string, err1 *st
 		return false
 	}
 
-	sameDrive, err := SameDrive(absInput, this.relative_to_)
-	if err1 != "" {
+	sameDrive := SameDrive(absInput, this.relative_to_, err1)
+	if *err1 != "" {
 		return false
 	}
 
 	if !sameDrive {
-		partiallyFixed := CanonicalizePath(&input)
+		slash_bits := uint64(0)
+		partiallyFixed := CanonicalizePath(&input, &slash_bits)
 		return partiallyFixed
 	}
 

@@ -81,7 +81,7 @@ func (this *ManifestParser) Parse(filename, input string, err *string) bool {
 				this.lexer_.UnreadToken()
 				name := ""
 				let_value := EvalString{}
-				if !this.ParseLet(name, &let_value, err) {
+				if !this.ParseLet(&name, &let_value, err) {
 					return false
 				}
 				value := let_value.Evaluate(this.env_)
@@ -135,7 +135,7 @@ func (this *ManifestParser) ParsePool(err *string) bool {
 	for this.lexer_.PeekToken(INDENT) {
 		key := ""
 		value := EvalString{}
-		if !this.ParseLet(key, &value, err) {
+		if !this.ParseLet(&key, &value, err) {
 			return false
 		}
 
@@ -176,7 +176,7 @@ func (this *ManifestParser) ParseRule(err *string) bool {
 	for this.lexer_.PeekToken(INDENT) {
 		key := ""
 		value := EvalString{}
-		if !this.ParseLet(key, &value, err) {
+		if !this.ParseLet(&key, &value, err) {
 			return false
 		}
 
@@ -201,7 +201,7 @@ func (this *ManifestParser) ParseRule(err *string) bool {
 	this.env_.AddRule(rule)
 	return true
 }
-func (this *ManifestParser) ParseLet(key string, value *EvalString, err *string) bool {
+func (this *ManifestParser) ParseLet(key *string, value *EvalString, err *string) bool {
 	if !this.lexer_.ReadIdent(key) {
 		return this.lexer_.Error("expected variable name", err)
 	}
@@ -333,12 +333,12 @@ func (this *ManifestParser) ParseEdge(err *string) bool {
 	has_indent_token := this.lexer_.PeekToken(INDENT)
 	env := this.env_
 	if has_indent_token {
-		env = NewBindingEnv(this.env_)
+		env = NewBindingEnvWithParent(this.env_)
 	}
 	for has_indent_token {
 		key := ""
 		val := EvalString{}
-		if !this.ParseLet(key, &val, err) {
+		if !this.ParseLet(&key, &val, err) {
 			return false
 		}
 
@@ -358,7 +358,7 @@ func (this *ManifestParser) ParseEdge(err *string) bool {
 		edge.pool_ = pool
 	}
 
-	edge.outputs_.reserve(len(this.outs_))
+	//edge.outputs_.reserve(len(this.outs_))
 	for i := 0; i < len(this.outs_); i++ {
 		path := this.outs_[i].Evaluate(env)
 		if path == "" {

@@ -127,7 +127,7 @@ type ImplicitDepLoader struct {
 	disk_interface_         DiskInterface
 	deps_log_               *DepsLog
 	depfile_parser_options_ *DepfileParserOptions
-	explanations_           OptionalExplanations
+	explanations_           Explanations
 }
 
 func NewImplicitDepLoader(state *State, deps_log *DepsLog, disk_interface DiskInterface,
@@ -236,8 +236,7 @@ func (this *ImplicitDepLoader) LoadDepFile(edge *Edge, path string, err *string)
 
 	// Ensure that all mentioned outputs are outputs of the edge.
 	for _, o := range depfile.outs_ {
-		m := matches(o)
-		if !slices.Contains(edge.outputs_, m) {
+		if !slices.Contains(edge.outputs_, o) {
 			*err = path + ": depfile mentions '" + o + "' as an output, but no such output was declared"
 			return false
 		}

@@ -649,13 +649,13 @@ func NewBuilder(state *State, config *BuildConfig, build_log *BuildLog,
 	} else {
 		ret.explanations_ = nil
 	}
-	ret.scan_ = NewDependencyScan(state, build_log, deps_log, disk_interface, &ret.config_.depfile_parser_options, ret.explanations_.get())
+	ret.scan_ = NewDependencyScan(state, build_log, deps_log, disk_interface, ret.config_.depfile_parser_options, ret.explanations_)
 	ret.lock_file_path_ = ".ninja_lock"
 	build_dir := ret.state_.bindings_.LookupVariable("builddir")
 	if build_dir!="" {
 		ret.lock_file_path_ = build_dir + "/" + ret.lock_file_path_
 	}
-	ret.status_.SetExplanations(ret.explanations_.get())
+	ret.status_.SetExplanations(ret.explanations_)
 	return &ret
 }
 
@@ -667,7 +667,7 @@ func (this*Builder) RealeaseBuilder() {
 
 /// Clean up after interrupted commands by deleting output files.
 func (this*Builder) Cleanup() {
-  if this.command_runner_.get() {
+  if this.command_runner_!=nil {
     active_edges := this.command_runner_.GetActiveEdges();
     this.command_runner_.Abort();
 
@@ -690,7 +690,7 @@ func (this*Builder) Cleanup() {
           this.disk_interface_.RemoveFile(o.path())
         }
       }
-      if !depfile.empty() {
+      if depfile!="" {
         this.disk_interface_.RemoveFile(depfile)
       }
     }
@@ -890,7 +890,8 @@ func (this*Builder)  StartEdge(edge *Edge, err *string) bool {
   // filesystem mtime to record later
   // XXX: this will block; do we care?
   for _,o := range edge.outputs_ {
-    if (! this.disk_interface_.MakeDirs(o.path())) {
+    ok,_ :=this.disk_interface_.MakeDirs(o.path())
+    if !ok  {
       return false
     }
     if (build_start == -1) {
@@ -907,14 +908,15 @@ func (this*Builder)  StartEdge(edge *Edge, err *string) bool {
   // Create depfile directory if needed.
   // XXX: this may also block; do we care?
   depfile := edge.GetUnescapedDepfile();
-  if !depfile.empty() && ! this.disk_interface_.MakeDirs(depfile) {
+  ok,_ := this.disk_interface_.MakeDirs(depfile)
+  if depfile!="" && !ok  {
 	  return false
   }
 
   // Create response file, if needed
   // XXX: this may also block; do we care?
   rspfile := edge.GetUnescapedRspfile();
-  if (!rspfile.empty()) {
+  if rspfile!=""  {
     content := edge.GetBinding("rspfile_content");
     if (! this.disk_interface_.WriteFile(rspfile, content)) {
 		return false
@@ -945,7 +947,7 @@ func (this*Builder)  FinishCommand(result * Result,  err *string)bool {
   deps_nodes := []*Node{}
    deps_type := edge.GetBinding("deps");
   deps_prefix := edge.GetBinding("msvc_deps_prefix");
-  if (!deps_type.empty()) {
+  if deps_type!="" {
     extract_err :=""
     if (! this.ExtractDeps(result, deps_type, deps_prefix, &deps_nodes,
                      &extract_err) &&
@@ -1017,7 +1019,7 @@ func (this*Builder)  FinishCommand(result * Result,  err *string)bool {
 
   // Delete any left over response file.
   rspfile := edge.GetUnescapedRspfile();
-  if (!rspfile.empty() && !g_keep_rsp) {
+  if rspfile!="" && !g_keep_rsp {
     this.disk_interface_. RemoveFile(rspfile)
   }
 
@@ -1029,8 +1031,8 @@ func (this*Builder)  FinishCommand(result * Result,  err *string)bool {
     }
   }
 
-  if (!deps_type.empty() && !this.config_.dry_run) {
-    if !edge.outputs_.empty()  {
+  if deps_type!="" && !this.config_.dry_run {
+    if len(edge.outputs_) !=0 {
       panic("should have been rejected by parser")
     }
     for _,o :=range edge.outputs_ {
@@ -1058,7 +1060,7 @@ func (this*Builder) ExtractDeps(result *Result, deps_type string, deps_prefix st
   if (deps_type == "msvc") {
      parser := CLParser{}
     output := ""
-    if (!parser.Parse(result.output, deps_prefix, &output, err)) {
+    if (!parser.Parse(&result.output, deps_prefix, &output, err)) {
       return false
     }
     result.output = output;
@@ -1071,7 +1073,7 @@ func (this*Builder) ExtractDeps(result *Result, deps_type string, deps_prefix st
     }
   } else if (deps_type == "gcc") {
     depfile := result.edge.GetUnescapedDepfile();
-    if (depfile.empty()) {
+    if depfile=="" {
       *err = string("edge with deps=gcc but no depfile makes no sense");
       return false;
     }
@@ -1089,7 +1091,7 @@ func (this*Builder) ExtractDeps(result *Result, deps_type string, deps_prefix st
       return true
     }
 
-     deps := NewDepfileParser( this.config_.depfile_parser_options);
+     deps := NewDepfileParser(this.config_.depfile_parser_options);
     if (!deps.Parse(&content, err)) {
       return false
     }
@@ -1098,8 +1100,8 @@ func (this*Builder) ExtractDeps(result *Result, deps_type string, deps_prefix st
     //deps_nodes.reserve(deps.ins_.size());
     for _,i :=range deps.ins_ {
       var slash_bits uint64 = 0
-      CanonicalizePath(&i, &slash_bits);
-      deps_nodes = append(deps_nodes, this.state_.GetNode(i, slash_bits));
+      CanonicalizePath(i, &slash_bits);
+      deps_nodes = append(deps_nodes, this.state_.GetNode(*i, slash_bits));
     }
 
     if (!g_keep_depfile) {

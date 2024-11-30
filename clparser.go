@@ -71,9 +71,9 @@ func (this *CLParser) Parse(output *string, deps_prefix string, filtered_output 
   for start < len(*output) {
      end := output.find_first_of("\r\n", start);
     if (end == string::npos){
-			end = output.size()
+			end = len(*output)
 		}
-    line := output.substr(start, end - start);
+    line := (*output)[start: end]
 
     include := FilterShowIncludes(line, deps_prefix);
     if include!="" {
@@ -84,7 +84,7 @@ func (this *CLParser) Parse(output *string, deps_prefix string, filtered_output 
 	  }
 
       if (!IsSystemInclude(normalized)) {
-		  this.includes_.insert(normalized)
+		  this.includes_.Add(normalized)
 	  }
     } else if (!seen_show_includes && FilterInputFilename(line)) {
       // Drop it.

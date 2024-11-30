@@ -69,7 +69,7 @@ type NinjaMain struct {
 	state_ State
 
 	/// Functions for accessing the disk.
-	disk_interface_ *RealDiskInterface
+	disk_interface_ FileReader // *RealDiskInterface
 
 	/// The build directory, used for storing the build log etc.
 	build_dir_ string

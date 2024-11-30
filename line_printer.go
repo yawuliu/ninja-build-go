@@ -58,7 +58,7 @@ func NewLinePrinter() *LinePrinter                      {
 
   if (!ret.supports_color_) {
     clicolor_force := os.Getenv("CLICOLOR_FORCE");
-	  ret.supports_color_ = clicolor_force && std::string(clicolor_force) != "0";
+	  ret.supports_color_ = clicolor_force!="" && clicolor_force != "0";
   }
   return &ret
 }
@@ -77,20 +77,20 @@ func (this *LinePrinter) Print(to_print string, tp LineType) {
   }
 
   if (this.smart_terminal_) {
-    printf("\r");  // Print over previous line, if any.
+	  fmt.Printf("\r");  // Print over previous line, if any.
     // On Windows, calling a C library function writing to stdout also handles
     // pausing the executable when the "Pause" key or Ctrl-S is pressed.
   }
 
-  if (this.smart_terminal_ && type == ELIDE) {
+  if (this.smart_terminal_ && tp == ELIDE) {
     CONSOLE_SCREEN_BUFFER_INFO csbi;
     GetConsoleScreenBufferInfo(console_, &csbi);
 
     ElideMiddleInPlace(to_print, static_cast<size_t>(csbi.dwSize.X));
     if (this.supports_color_) {  // this means ENABLE_VIRTUAL_TERMINAL_PROCESSING
                             // succeeded
-      printf("%s\x1B[K", to_print.c_str());  // Clear to end of line.
-      fflush(stdout);
+		fmt.Printf("%s\x1B[K", to_print);  // Clear to end of line.
+		os.Stdout.Sync()
     } else {
       // We don't want to have the cursor spamming back and forth, so instead of
       // printf use WriteConsoleOutput which updates the contents of the buffer,
@@ -101,17 +101,17 @@ func (this *LinePrinter) Print(to_print string, tp LineType) {
                             static_cast<SHORT>(csbi.dwCursorPosition.X +
                                                csbi.dwSize.X - 1),
                             csbi.dwCursorPosition.Y };
-      vector<CHAR_INFO> char_data(csbi.dwSize.X);
-      for (size_t i = 0; i < static_cast<size_t>(csbi.dwSize.X); ++i) {
-        char_data[i].Char.AsciiChar = i < to_print.size() ? to_print[i] : ' ';
+      char_data := []CHAR_INFO (csbi.dwSize.X);
+      for i := 0; i < csbi.dwSize.X; i++ {
+        char_data[i].Char.AsciiChar = i < len(to_print) ? to_print[i] : ' ';
         char_data[i].Attributes = csbi.wAttributes;
       }
       WriteConsoleOutput(console_, &char_data[0], buf_size, zero_zero, &target);
     }
     this.have_blank_line_ = false;
   } else {
-    printf("%s\n", to_print.c_str());
-    fflush(stdout);
+    fmt.Printf("%s\n", to_print);
+    os.Stdout.Sync()
   }
 }
 
@@ -119,7 +119,7 @@ func (this *LinePrinter) Print(to_print string, tp LineType) {
 func (this *LinePrinter) PrintOnNewLine(to_print string) {
 	if this.console_locked_ && this.line_buffer_ != "" {
 		this.output_buffer_ += this.line_buffer_
-		this.output_buffer_ += '\n'
+		this.output_buffer_ += string('\n')
 		this.line_buffer_ = ""
 	}
 	if !this.have_blank_line_ {

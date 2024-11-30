@@ -17,7 +17,7 @@ type BuildConfig struct {
 	/// The maximum load average we must not exceed. A negative value
 	/// means that we do not have any limit.
 	max_load_average       float64
-	depfile_parser_options DepfileParserOptions
+	depfile_parser_options *DepfileParserOptions
 }
 
 func NewBuildConfig() *BuildConfig {
@@ -46,5 +46,5 @@ type Builder struct {
 	// Only create an Explanations class if '-d explain' is used.
 	explanations_ Explanations
 
-	scan_ DependencyScan
+	scan_ *DependencyScan
 }

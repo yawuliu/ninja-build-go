@@ -179,7 +179,7 @@ func (this *BuildLog) Load(path string, err *string) LoadStatus {
     entry.mtime = mtime;
     c := *end
     *end = '\000';
-    entry.command_hash = strtoull(start, NULL, 16);
+    entry.command_hash = strtoull(start, nil, 16);
     *end = c;
   }
   file.Close()

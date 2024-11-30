@@ -29,7 +29,7 @@ const (
 type Lexer struct {
 	filename_   string
 	input_      string
-	ofs_        int
+	ofs_        uint8
 	last_token_ Token
 }
 
@@ -226,7 +226,7 @@ func (this*Lexer) ReadEvalString(eval *EvalString, path bool, err *string) bool 
 					p = start;
 					break;
 				} else {
-					if (*start == '\n') {
+					if *start == '\n' {
 						break
 					}
 					eval.AddText(string(start, 1));
@@ -581,7 +581,7 @@ func (this *Lexer) Error(message string, err *string) bool {
         break;
       }
     }
-    *err += string(line_start, len);
+    *err += line_start
     if (truncated) {
 		*err += "..."
 	}

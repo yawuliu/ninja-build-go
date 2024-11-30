@@ -12,7 +12,7 @@ type NodeStoringImplicitDepLoader struct {
 func NewNodeStoringImplicitDepLoader(state * State, deps_log *DepsLog, disk_interface DiskInterface,
        depfile_parser_options *DepfileParserOptions, explanations Explanations, dep_nodes_output []*Node) *NodeStoringImplicitDepLoader {
 	ret := NodeStoringImplicitDepLoader{}
-	ret.ImplicitDepLoader = NewImplicitDepLoader(state, deps_log, disk_interface, depfile_parser_options, explanations)
+	ret.ImplicitDepLoader = *NewImplicitDepLoader(state, deps_log, disk_interface, depfile_parser_options, explanations)
 	ret.dep_nodes_output_ = dep_nodes_output
 	return &ret
 }
@@ -54,7 +54,7 @@ type MissingDependencyScanner struct {
 	seen_                   map[*Node]bool
 	nodes_missing_deps_     map[*Node]bool
 	generated_nodes_        map[*Node]bool
-	generator_rules_        map[*Node]bool
+	generator_rules_        map[*Rule]bool
 	missing_dep_path_count_ int
 
 	adjacency_map_ AdjacencyMap
@@ -90,18 +90,18 @@ func (this *MissingDependencyScanner) ProcessNode(node *Node) {
   if deps_type !="" {
     deps := this.deps_log_.GetDeps(node);
     if deps!=nil {
-		this.ProcessNodeDeps(node, deps.nodes, deps.node_count)
+		this.ProcessNodeDeps(node, deps.nodes)
 	}
   } else {
      parser_opts := DepfileParserOptions{}
-    depfile_deps := []*Node{}
+     depfile_deps := []*Node{}
      dep_loader := NewNodeStoringImplicitDepLoader(this.state_, this.deps_log_, this.disk_interface_,
                                             &parser_opts, nil,
                                             depfile_deps);
     err := ""
     dep_loader.LoadDeps(edge, &err);
     if len(depfile_deps)!=0 {
-		this.ProcessNodeDeps(node, &depfile_deps[0], len(depfile_deps))
+		this.ProcessNodeDeps(node, depfile_deps)
 	}
   }
 }
@@ -126,10 +126,10 @@ func (this *MissingDependencyScanner) HadMissingDeps() bool {
 	return len(this.nodes_missing_deps_) != 0
 }
 
-func (this *MissingDependencyScanner) ProcessNodeDeps(node *Node, dep_nodes []*Node, dep_nodes_count int) {
+func (this *MissingDependencyScanner) ProcessNodeDeps(node *Node, dep_nodes []*Node){
   edge := node.in_edge();
   deplog_edges := set.New()   //[]*Edge{}
-  for  i := 0; i < dep_nodes_count; i++ {
+  for  i := 0; i < len(dep_nodes); i++ {
     deplog_node := dep_nodes[i];
     // Special exception: A dep on build.ninja can be used to mean "always
     // rebuild this target when the build is reconfigured", but build.ninja is
@@ -155,10 +155,10 @@ func (this *MissingDependencyScanner) ProcessNodeDeps(node *Node, dep_nodes []*N
   if len(missing_deps) !=0 {
     missing_deps_rule_names := set.New() // std::set<std::string>
     for _,ne := range  missing_deps {
-      for i := 0; i < dep_nodes_count; i++ {
+      for i := 0; i < len(dep_nodes); i++ {
         if dep_nodes[i].in_edge() == ne {
-			this.generated_nodes_.insert(dep_nodes[i]);
-			this.generator_rules_.insert(ne.rule());
+			this.generated_nodes_[dep_nodes[i]]=true
+			this.generator_rules_[ne.rule()]=true
           missing_deps_rule_names.Add(ne.rule().name());
 			this.delegate_.OnMissingDep(node, dep_nodes[i].path(), (*ne).rule());
         }
@@ -177,7 +177,8 @@ func (this *MissingDependencyScanner) PathExistsBetween(from, to *Edge) bool {
       return inner_it
     }
   } else {
-    it = this.adjacency_map_.insert(std::make_pair(from, InnerAdjacencyMap())).first;
+	  inner_it =InnerAdjacencyMap{}
+	  this.adjacency_map_[from] =  inner_it
   }
   found := false;
   for i := 0; i < len(to.inputs_); i++ {
@@ -187,6 +188,6 @@ func (this *MissingDependencyScanner) PathExistsBetween(from, to *Edge) bool {
       break;
     }
   }
-  it.second.insert(std::make_pair(to, found));
+  second[to] = found
   return found;
 }

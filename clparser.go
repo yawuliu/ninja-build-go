@@ -95,10 +95,10 @@ func (this *CLParser) Parse(output *string, deps_prefix string, filtered_output 
       *filtered_output+="\n"
     }
 
-    if (end < len(*output) && output[end] == '\r') {
+    if (end < len(*output) && (*output)[end] == '\r') {
 		end++
 	}
-    if (end < len(*output) && output[end] == '\n') {
+    if (end < len(*output) &&  (*output)[end] == '\n') {
 		end++
 	}
     start = end;

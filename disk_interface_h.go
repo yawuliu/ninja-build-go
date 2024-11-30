@@ -32,4 +32,5 @@ type DiskInterface interface {
 	MakeDirs(path string) (bool, error)
 	ReadFile(path string, contents, err *string) StatusEnum
 	RemoveFile(path string) int
+	AllowStatCache(allow bool)
 }

@@ -1146,7 +1146,7 @@ func (this *NinjaMain) ToolTargets(options *Options, args []string) int {
 		} else if mode == "all" {
 			return ToolTargetsList1(&this.state_)
 		} else {
-			suggestion := SpellcheckString(mode, "rule", "depth", "all", nil)
+			suggestion := SpellcheckString(mode, "rule", "depth", "all", "\000")
 			if suggestion != "" {
 				Error("unknown target tool mode '%s', did you mean '%s'?",
 					mode, suggestion)
@@ -1387,7 +1387,7 @@ func (this *NinjaMain) ToolRestat(options *Options, args []string) int {
 	}
 
 	if !this.config_.dry_run {
-		if !this.build_log_.OpenForWrite(log_path, *this, &err) {
+		if !this.build_log_.OpenForWrite(log_path, this, &err) {
 			Error("opening build log: %s", err)
 			return EXIT_FAILURE
 		}
@@ -1546,7 +1546,7 @@ func DebugEnable(name string) bool {
 		g_experimental_statcache = false
 		return true
 	} else {
-		suggestion := SpellcheckString(name, "stats", "explain", "keepdepfile", "keeprsp", "nostatcache", nil)
+		suggestion := SpellcheckString(name, "stats", "explain", "keepdepfile", "keeprsp", "nostatcache", "\000")
 		if suggestion != "" {
 			Error("unknown debug setting '%s', did you mean '%s'?", name, suggestion)
 		} else {

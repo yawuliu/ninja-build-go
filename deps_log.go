@@ -297,7 +297,7 @@ func (this *DepsLog) GetFirstReverseDepsNode(node *Node) *Node               {
 	  }
     }
   }
-  return NULL;
+  return nil
 }
 
 // / Rewrite the known log entries, throwing away old data.
@@ -309,7 +309,7 @@ func (this *DepsLog) Recompact(path string, err *string) bool {
 
   // OpenForWrite() opens for append.  Make sure it's not appending to a
   // left-over file from a previous recompaction attempt that crashed somehow.
-  unlink(temp_path)
+  os.RemoveAll(temp_path)
 
   var  new_log DepsLog
   if (!new_log.OpenForWrite(temp_path, err)) {
@@ -318,22 +318,22 @@ func (this *DepsLog) Recompact(path string, err *string) bool {
 
   // Clear all known ids so that new ones can be reassigned.  The new indices
   // will refer to the ordering in new_log, not in the current log.
-  for (vector<Node*>::iterator i = nodes_.begin(); i != nodes_.end(); ++i){
-		(*i)- > set_id(-1)
+  for _,i := range this.nodes_ {
+		i.set_id(-1)
 	}
 
   // Write out all deps again.
-  for old_id := 0; old_id < (int)deps_.size(); old_id++ {
-   deps := deps_[old_id];
-    if (!deps) {
+  for old_id := 0; old_id < len(this.deps_); old_id++ {
+   deps := this.deps_[old_id];
+    if deps==nil {
 		continue
 	}  // If nodes_[old_id] is a leaf, it has no deps.
 
-    if (!IsDepsEntryLiveFor(nodes_[old_id])) {
+    if (!IsDepsEntryLiveFor(this.nodes_[old_id])) {
 		continue
 	}
 
-    if (!new_log.RecordDeps(nodes_[old_id], deps.mtime, deps.node_count, deps.nodes)) {
+    if (!new_log.RecordDeps(this.nodes_[old_id], deps.mtime,  deps.nodes)) {
       new_log.Close();
       return false;
     }
@@ -343,15 +343,17 @@ func (this *DepsLog) Recompact(path string, err *string) bool {
 
   // All nodes now have ids that refer to new_log, so steal its data.
   this.deps_.swap(new_log.deps_);
-	this.nodes_.swap(new_log.nodes_);
+  this.nodes_.swap(new_log.nodes_);
 
-  if (unlink(path) < 0) {
-    *err = strerror(errno);
+  err1:= os.RemoveAll(path)
+  if err1!=nil {
+    *err = err1.Error()
     return false;
   }
 
-  if (rename(temp_path, path) < 0) {
-    *err = strerror(errno);
+  err1 = os.Rename(temp_path, path)
+  if err1!=nil {
+    *err = err1.Error()
     return false;
   }
 
@@ -395,8 +397,10 @@ func (this *DepsLog) UpdateDeps(out_id int, deps *Deps) bool {
 
 // Write a node name record, assigning it an id.
 func (this *DepsLog) RecordId(node *Node) bool {
-  path_size := node.path().size();
-  assert(path_size > 0 && "Trying to record empty path Node!");
+  path_size := len(node.path())
+  if (path_size > 0) {
+	  panic("Trying to record empty path Node!")
+  }
   padding := (4 - path_size % 4) % 4;  // Pad path to 4 byte boundary.
 
   size := path_size + padding + 4;
@@ -418,7 +422,7 @@ func (this *DepsLog) RecordId(node *Node) bool {
 	  return false
   }
   id := this.nodes_.size();
-  unsigned checksum = ~(unsigned)id;
+  checksum := ~(unsigned)id;
   if (fwrite(&checksum, 4, 1, this.file_) < 1) {
 	  return false
   }
@@ -427,7 +431,7 @@ func (this *DepsLog) RecordId(node *Node) bool {
   }
 
   node.set_id(id);
-	this.nodes_.push_back(node);
+	this.nodes_ =append(this.nodes_, node)
 
   return true;
 }
@@ -464,6 +468,6 @@ func (this *DepsLog) OpenForWriteIfNeeded() bool {
   if (fflush(this.file_) != 0) {
     return false;
   }
-	this.file_path_.clear();
+	this.file_path_ = ""
   return true;
 }

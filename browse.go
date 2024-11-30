@@ -55,7 +55,7 @@ func RunBrowsePython(state *State, ninjaCommand string, inputFile string, argc i
 
 // fork 函数，模拟C++中的fork
 func fork() (pid int, err error) {
-	pid, _, err = syscall.RawSyscall(syscall.SYS_FORK, 0, 0, 0)
+	pid, _, err = syscall.Syscall(syscall.SYS_FORK, 0, 0, 0)
 	if err != nil {
 		return -1, err
 	}

@@ -117,9 +117,9 @@ type InputsCollector struct {
 type DependencyScan struct {
 	build_log_      *BuildLog
 	disk_interface_ DiskInterface
-	dep_loader_     ImplicitDepLoader
-	dyndep_loader_  DyndepLoader
-	explanations_   OptionalExplanations
+	dep_loader_     *ImplicitDepLoader
+	dyndep_loader_  *DyndepLoader
+	explanations_   *OptionalExplanations
 }
 
 type ImplicitDepLoader struct {
@@ -206,7 +206,7 @@ func (this *ImplicitDepLoader) LoadDepFile(edge *Edge, path string, err *string)
 
 	depfile := NewDepfileParser(this.depfile_parser_options_)
 	if this.depfile_parser_options_ != nil {
-		depfile = NewDepfileParser(DepfileParserOptions())
+		depfile = NewDepfileParser(NewDepfileParserOptions())
 	}
 	depfile_err := ""
 	if !depfile.Parse(&content, &depfile_err) {
@@ -214,19 +214,19 @@ func (this *ImplicitDepLoader) LoadDepFile(edge *Edge, path string, err *string)
 		return false
 	}
 
-	if depfile.outs_.empty() {
+	if len(depfile.outs_) == 0 {
 		*err = path + ": no outputs declared"
 		return false
 	}
 
 	unused := uint64(0)
-	primary_out := depfile.outs_.begin()
-	CanonicalizePath(primary_out, &unused)
+	primary_out := depfile.outs_[0]
+	CanonicalizePath(&primary_out, &unused)
 
 	// Check that this depfile matches the edge's output, if not return false to
 	// mark the edge as dirty.
 	opath := first_output.path()
-	if opath != *primary_out {
+	if opath != primary_out {
 		this.explanations_.Record(first_output,
 			"expected depfile '%s' to mention '%s', got '%s'",
 			path, first_output.path(),

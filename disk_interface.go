@@ -124,9 +124,9 @@ func (this *RealDiskInterface) Stat(path string, err *string) TimeStamp {
 	METRIC_RECORD("node stat");
   // MSDN: "Naming Files, Paths, and Namespaces"
   // http://msdn.microsoft.com/en-us/library/windows/desktop/aa365247(v=vs.85).aspx
-  if path!="" && !AreLongPathsEnabled() && path[0] != '\\' && len(path) > MAX_PATH {
+  if path!="" && !AreLongPathsEnabled() && path[0] != '\\' && len(path) > syscall.MAX_PATH {
 	tmp := ""
-	fmt.Sprintf(tmp, "Stat(%s): Filename longer than %d characters", path, MAX_PATH)
+	fmt.Sprintf(tmp, "Stat(%s): Filename longer than %d characters", path, syscall.MAX_PATH)
     *err = tmp
     return -1;
   }
@@ -152,16 +152,16 @@ func (this *RealDiskInterface) Stat(path string, err *string) TimeStamp {
   transform(dir.begin(), dir.end(), dir_lowercase.begin(), ::tolower);
   transform(base.begin(), base.end(), base.begin(), ::tolower);
 
-  ci := this.cache_.find(dir_lowercase);
-  if (ci == this.cache_.end()) {
+  ci_second,ok := this.cache_[dir_lowercase]
+  if !ok {
     ci = this.cache_.insert(make_pair(dir_lowercase, DirCache())).first;
     if !StatAllFilesInDir(dir=="" ? "." : dir, &ci.second, err) {
       this.cache_.erase(ci);
       return -1;
     }
   }
-  di := ci.second.find(base);
-  if  di != ci.second.end() {
+  di := ci_second.find(base);
+  if  di != ci_second.end() {
 	  return di.second
   }  else{
 	  return  0

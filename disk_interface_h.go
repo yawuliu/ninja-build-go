@@ -16,7 +16,7 @@ type RealDiskInterface struct {
 }
 
 type FileReader interface {
-	ReadFile(path string, contents *string, err *string) Status
+	ReadFile(path string, contents *string, err *string) StatusEnum
 }
 
 type DiskInterface interface {
@@ -24,6 +24,6 @@ type DiskInterface interface {
 	Stat(path string, err *string) TimeStamp
 	WriteFile(path string, contents string) bool
 	MakeDir(path string) bool
-	ReadFile(path string, contents, err *string) Status
+	ReadFile(path string, contents, err *string) StatusEnum
 	RemoveFile(path string) int
 }

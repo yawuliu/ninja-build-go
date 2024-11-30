@@ -1,5 +1,10 @@
 package main
 
+import (
+	"slices"
+	"strconv"
+)
+
 type PhonyCycleAction int8
 
 const (
@@ -33,7 +38,7 @@ type ManifestParser struct {
 }
 
 // = ManifestParserOptions()
-func NewManifestParser(state *State, file_reader *FileReader, options *ManifestParserOptions) *ManifestParser {
+func NewManifestParser(state *State, file_reader FileReader, options *ManifestParserOptions) *ManifestParser {
 	ret := ManifestParser{}
 	ret.Parser = NewParser(state, file_reader)
 	ret.options_ = options
@@ -43,13 +48,13 @@ func NewManifestParser(state *State, file_reader *FileReader, options *ManifestP
 }
 
 // / Parse a text string of input.  Used by tests.
-func (this *ManifestParser) ParseTest(input string, err string) bool {
+func (this *ManifestParser) ParseTest(input string, err *string) bool {
 	this.quiet_ = true
 	return this.Parse("input", input, err)
 }
 
 // / Parse a file, given its contents as a string.
-func (this *ManifestParser) Parse(filename, input string, err string) bool {
+func (this *ManifestParser) Parse(filename, input string, err *string) bool {
 	this.lexer_.Start(filename, input);
 
 	for {
@@ -109,7 +114,7 @@ func (this *ManifestParser) Parse(filename, input string, err string) bool {
 }
 
 // / Parse various statement types.
-func (this *ManifestParser) ParsePool(err string) bool                             {
+func (this *ManifestParser) ParsePool(err *string) bool                             {
    name := ""
   if (!this.lexer_.ReadIdent(&name)) {
 	  return this.lexer_.Error("expected pool name", err)
@@ -125,18 +130,19 @@ func (this *ManifestParser) ParsePool(err string) bool                          
 
   depth := -1;
 
-  while (this.lexer_.PeekToken(INDENT)) {
+  for this.lexer_.PeekToken(INDENT) {
      key := ""
     value := EvalString{}
-		if (!this.ParseLet(&key, &value, err)) {
+		if (!this.ParseLet(key, &value, err)) {
 		return false
 	}
 
     if (key == "depth") {
-       depth_string := value.Evaluate(env_);
-      depth = atol(depth_string);
-      if (depth < 0)
-        return this.lexer_.Error("invalid pool depth", err);
+       depth_string := value.Evaluate(this.env_);
+      depth,_ = strconv.Atoi(depth_string);
+      if (depth < 0) {
+		  return this.lexer_.Error("invalid pool depth", err)
+	  }
     } else {
       return this.lexer_.Error("unexpected variable '" + key + "'", err);
     }
@@ -149,7 +155,7 @@ func (this *ManifestParser) ParsePool(err string) bool                          
 	this.state_.AddPool(NewPool(name, depth));
   return true;
 }
-func (this *ManifestParser) ParseRule(err string) bool                             {
+func (this *ManifestParser) ParseRule(err *string) bool                             {
   name := ""
   if (!this.lexer_.ReadIdent(&name)) {
 	  return this.lexer_.Error("expected rule name", err)
@@ -165,15 +171,15 @@ func (this *ManifestParser) ParseRule(err string) bool                          
 
   rule := NewRule(name);  // XXX scoped_ptr
 
-  while (this.lexer_.PeekToken(INDENT)) {
+  for this.lexer_.PeekToken(INDENT) {
      key := ""
      value := EvalString{}
-    if (!this.ParseLet(&key, &value, err)) {
+    if (!this.ParseLet(key, &value, err)) {
 		return false
 	}
 
-    if (Rule::IsReservedBinding(key)) {
-      rule.AddBinding(key, value);
+    if IsReservedBinding(key) {
+      rule.AddBinding(key, &value);
     } else {
       // Die on other keyvals for now; revisit if we want to add a
       // scope here.
@@ -182,7 +188,7 @@ func (this *ManifestParser) ParseRule(err string) bool                          
   }
 
   if (rule.bindings_["rspfile"].empty() !=  rule.bindings_["rspfile_content"].empty()) {
-    return this.lexer_.Error("rspfile and rspfile_content need to be "
+    return this.lexer_.Error("rspfile and rspfile_content need to be " +
                         "both specified", err);
   }
 
@@ -193,11 +199,11 @@ func (this *ManifestParser) ParseRule(err string) bool                          
 	this.env_.AddRule(rule);
   return true;
 }
-func (this *ManifestParser) ParseLet(key string, value *EvalString, err string) bool {
+func (this *ManifestParser) ParseLet(key string, value *EvalString, err *string) bool {
   if (!this.lexer_.ReadIdent(key)) {
 	  return this.lexer_.Error("expected variable name", err)
   }
-  if (!this.ExpectToken(Lexer::EQUALS, err)){
+  if (!this.ExpectToken(EQUALS, err)){
 	return false;
   }
   if (!this.lexer_.ReadVarValue(value, err)) {
@@ -205,18 +211,18 @@ func (this *ManifestParser) ParseLet(key string, value *EvalString, err string) 
   }
   return true;
 }
-func (this *ManifestParser) ParseEdge(err string) bool                             {
-	this.ins_.clear();
-	this.outs_.clear();
-	this.validations_.clear();
+func (this *ManifestParser) ParseEdge(err *string) bool                             {
+	this.ins_ =[]EvalString{}
+	this.outs_=[]EvalString{}
+	this.validations_=[]EvalString{}
 
   {
      out := EvalString{}
     if (!this.lexer_.ReadPath(&out, err)) {
 		return false
 	}
-    while (!out.empty()) {
-	  this.outs_.push_back(std::move(out));
+    for !out.empty() {
+	  this.outs_ = append(this.outs_, out)
 
       out.Clear();
       if (!this.lexer_.ReadPath(&out, err)) {
@@ -236,12 +242,12 @@ func (this *ManifestParser) ParseEdge(err string) bool                          
       if (out.empty()) {
 		  break
 	  }
-		this.outs_.push_back(std::move(out));
-      ++implicit_outs;
+		this.outs_ = append(this.outs_, out)
+      implicit_outs ++
     }
   }
 
-  if (this.outs_.empty()) {
+  if len(this.outs_)==0 {
 	  return this.lexer_.Error("expected path", err)
   }
 
@@ -255,7 +261,7 @@ func (this *ManifestParser) ParseEdge(err string) bool                          
   }
 
   rule := this.env_.LookupRule(rule_name);
-  if (!rule) {
+  if rule==nil {
 	  return this.lexer_.Error("unknown build rule '"+rule_name+"'", err)
   }
 
@@ -268,38 +274,38 @@ func (this *ManifestParser) ParseEdge(err string) bool                          
     if (in.empty()) {
 		break
 	}
-	  this.ins_.push_back(std::move(in));
+	  this.ins_ = append(this.ins_, in)
   }
 
   // Add all implicit deps, counting how many as we go.
   implicit := 0;
-  if (lexer_.PeekToken(Lexer::PIPE)) {
-    for (;;) {
-      EvalString in;
-      if (!lexer_.ReadPath(&in, err)){
+  if (this.lexer_.PeekToken(PIPE)) {
+    for  {
+       in :=EvalString{}
+      if (!this.lexer_.ReadPath(&in, err)){
 			return false;
 	  }
       if (in.empty()){
 			break;
 	  }
-      ins_.push_back(std::move(in));
-      ++implicit;
+      this.ins_ =append(this.ins_, in)
+      implicit++
     }
   }
 
   // Add all order-only deps, counting how many as we go.
   order_only := 0;
-  if (lexer_.PeekToken(Lexer::PIPE2)) {
-    for (;;) {
-      EvalString in;
-      if (!lexer_.ReadPath(&in, err)){
+  if this.lexer_.PeekToken(PIPE2) {
+    for  {
+       in := EvalString{}
+      if !this.lexer_.ReadPath(&in, err) {
 		  return false;
 	  }
       if (in.empty()){
 			break;
 	  }
-      ins_.push_back(std::move(in));
-      ++order_only;
+		this.ins_= append(this.ins_, in)
+     order_only ++
     }
   }
 
@@ -313,7 +319,7 @@ func (this *ManifestParser) ParseEdge(err string) bool                          
       if validation.empty() {
 		break;
 	  }
-      this.validations_.push_back(std::move(validation));
+      this.validations_ =append(this.validations_, validation)
     }
   }
 
@@ -323,23 +329,26 @@ func (this *ManifestParser) ParseEdge(err string) bool                          
 
   // Bindings on edges are rare, so allocate per-edge envs only when needed.
    has_indent_token := this.lexer_.PeekToken(INDENT);
-   env := has_indent_token ? new BindingEnv(env_) : env_;
-  while (has_indent_token) {
-    string key;
-    EvalString val;
-    if (!ParseLet(&key, &val, err)) {
+   env :=  this.env_
+   if has_indent_token {
+	   env= NewBindingEnv(this.env_)
+   }
+  for has_indent_token {
+    key := ""
+     val := EvalString{}
+    if !this.ParseLet(key, &val, err) {
 		return false
 	}
 
-    env.AddBinding(key, val.Evaluate(env_));
-    has_indent_token = this.lexer_.PeekToken(Lexer::INDENT);
+    env.AddBinding(key, val.Evaluate(this.env_));
+    has_indent_token = this.lexer_.PeekToken(INDENT);
   }
 
   edge := this.state_.AddEdge(rule);
   edge.env_ = env;
 
   pool_name := edge.GetBinding("pool");
-  if (!pool_name.empty()) {
+  if pool_name!="" {
     pool := this.state_.LookupPool(pool_name);
     if pool == nil{
 		return this.lexer_.Error("unknown pool name '"+pool_name+"'", err)
@@ -347,21 +356,21 @@ func (this *ManifestParser) ParseEdge(err string) bool                          
     edge.pool_ = pool;
   }
 
-  edge.outputs_.reserve(this.outs_.size());
-  for i := 0, e = this.outs_.size(); i != e; ++i {
+  edge.outputs_.reserve(len(this.outs_))
+  for i := 0; i < len(this.outs_);i++  {
     path := this.outs_[i].Evaluate(env);
-    if (path.empty()) {
-		return lexer_.Error("empty path", err)
+    if path=="" {
+		return this.lexer_.Error("empty path", err)
 	}
     slash_bits := uint64(0)
 	CanonicalizePath(&path, &slash_bits);
-    if (!state_.AddOut(edge, path, slash_bits, err)) {
-      lexer_.Error(std::string(*err), err);
+    if (!this.state_.AddOut(edge, path, slash_bits, err)) {
+		this.lexer_.Error(*err, err);
       return false;
     }
   }
 
-  if (edge.outputs_.empty()) {
+  if len(edge.outputs_)==0 {
     // All outputs of the edge are already created by other edges. Don't add
     // this edge.  Do this check before input nodes are connected to the edge.
     this.state_.edges_.pop_back();
@@ -370,46 +379,42 @@ func (this *ManifestParser) ParseEdge(err string) bool                          
   }
   edge.implicit_outs_ = implicit_outs;
 
-  edge.inputs_.reserve(ins_.size());
-  for (vector<EvalString>::iterator i = ins_.begin(); i != ins_.end(); ++i) {
-    string path = i.Evaluate(env);
-    if (path.empty()) {
-		return lexer_.Error("empty path", err)
+  edge.inputs_.reserve(len(this.ins_));
+  for _,i := range this.ins_ {
+    path := i.Evaluate(env);
+    if path=="" {
+		return this.lexer_.Error("empty path", err)
 	}
-    uint64_t slash_bits;
-    CanonicalizePath(&path, &slash_bits);
-    state_.AddIn(edge, path, slash_bits);
+    slash_bits := uint64(0)
+	  CanonicalizePath(&path, &slash_bits);
+    this.state_.AddIn(edge, path, slash_bits);
   }
   edge.implicit_deps_ = implicit;
   edge.order_only_deps_ = order_only;
 
-  edge.validations_.reserve(validations_.size());
-  for (std::vector<EvalString>::iterator v = validations_.begin();
-      v != validations_.end(); ++v) {
-    string path = v.Evaluate(env);
-    if (path.empty()) {
-		return lexer_.Error("empty path", err)
+  edge.validations_.reserve(len(this.validations_))
+  for _,v := range this.validations_ {
+    path := v.Evaluate(env);
+    if path=="" {
+		return this.lexer_.Error("empty path", err)
 	}
-    uint64_t slash_bits;
-    CanonicalizePath(&path, &slash_bits);
-    state_.AddValidation(edge, path, slash_bits);
+    slash_bits := uint64(0)
+		CanonicalizePath(&path, &slash_bits);
+    this.state_.AddValidation(edge, path, slash_bits);
   }
 
-  if (options_.phony_cycle_action_ == kPhonyCycleActionWarn &&
-      edge.maybe_phonycycle_diagnostic()) {
+  if (this.options_.phony_cycle_action_ == kPhonyCycleActionWarn &&  edge.maybe_phonycycle_diagnostic()) {
     // CMake 2.8.12.x and 3.0.x incorrectly write phony build statements
     // that reference themselves.  Ninja used to tolerate these in the
     // build graph but that has since been fixed.  Filter them out to
     // support users of those old CMake versions.
-    Node* out = edge.outputs_[0];
-    vector<Node*>::iterator new_end =
-        remove(edge.inputs_.begin(), edge.inputs_.end(), out);
+    out := edge.outputs_[0];
+    new_end :=  remove(edge.inputs_.begin(), edge.inputs_.end(), out);
     if (new_end != edge.inputs_.end()) {
       edge.inputs_.erase(new_end, edge.inputs_.end());
-      if (!quiet_) {
-        Warning("phony target '%s' names itself as an input; "
-                "ignoring [-w phonycycle=warn]",
-                out.path());
+      if !this.quiet_ {
+        Warning("phony target '%s' names itself as an input; "+
+                "ignoring [-w phonycycle=warn]",  out.path());
       }
     }
   }
@@ -418,49 +423,56 @@ func (this *ManifestParser) ParseEdge(err string) bool                          
   // to load generated dependency information dynamically, but it must
   // be one of our manifest-specified inputs.
   dyndep := edge.GetUnescapedDyndep();
-  if (!dyndep.empty()) {
-    uint64_t slash_bits;
-    CanonicalizePath(&dyndep, &slash_bits);
-    edge.dyndep_ = state_.GetNode(dyndep, slash_bits);
+  if dyndep!="" {
+    slash_bits := uint64(0)
+	  CanonicalizePath(&dyndep, &slash_bits);
+    edge.dyndep_ = this.state_.GetNode(dyndep, slash_bits);
     edge.dyndep_.set_dyndep_pending(true);
-    vector<Node*>::iterator dgi =
-      std::find(edge.inputs_.begin(), edge.inputs_.end(), edge.dyndep_);
-    if (dgi == edge.inputs_.end()) {
-      return lexer_.Error("dyndep '" + dyndep + "' is not an input", err);
+    if !slices.Contains(edge.inputs_,edge.dyndep_) {
+      return this.lexer_.Error("dyndep '" + dyndep + "' is not an input", err);
     }
-    assert(!edge.dyndep_.generated_by_dep_loader());
+    if (!edge.dyndep_.generated_by_dep_loader()) {
+		panic("!edge.dyndep_.generated_by_dep_loader()")
+	}
   }
 
   return true;
 }
-func (this *ManifestParser) ParseDefault(err string) bool                          {
-  EvalString eval;
-  if (!lexer_.ReadPath(&eval, err))
-    return false;
+func (this *ManifestParser) ParseDefault(err *string) bool                          {
+   eval :=EvalString{}
+  if (!this.lexer_.ReadPath(&eval, err)) {
+	  return false
+  }
   if (eval.empty()) {
-	  return lexer_.Error("expected target name", err)
+	  return this.lexer_.Error("expected target name", err)
   }
 
-  do {
-    string path = eval.Evaluate(env_);
-    if (path.empty())
-      return lexer_.Error("empty path", err);
-    uint64_t slash_bits;  // Unused because this only does lookup.
+  for {
+    path := eval.Evaluate(this.env_);
+    if path=="" {
+	  return this.lexer_.Error("empty path", err)
+	}
+    slash_bits := uint64(0)  // Unused because this only does lookup.
     CanonicalizePath(&path, &slash_bits);
-    std::string default_err;
-    if (!state_.AddDefault(path, &default_err))
-      return lexer_.Error(default_err, err);
+    default_err := ""
+    if !this.state_.AddDefault(path, &default_err) {
+		return this.lexer_.Error(default_err, err)
+	}
 
     eval.Clear();
-    if (!lexer_.ReadPath(&eval, err))
-      return false;
-  } while (!eval.empty());
+    if (!this.lexer_.ReadPath(&eval, err)) {
+		return false
+	}
+	  if  eval.empty(){
+		  break
+	  }
+  }
 
-  return ExpectToken(Lexer::NEWLINE, err);
+  return this.ExpectToken(NEWLINE, err);
 }
 
 // / Parse either a 'subninja' or 'include' line.
-func (this *ManifestParser) ParseFileInclude(new_scope bool, err string) bool {
+func (this *ManifestParser) ParseFileInclude(new_scope bool, err *string) bool {
    eval := EvalString{}
   if (!this.lexer_.ReadPath(&eval, err)) {
 	  return false

@@ -3,10 +3,10 @@ package main
 type DepfileParser struct {
 	outs_    []string
 	ins_     []string
-	options_ DepfileParserOptions
+	options_ *DepfileParserOptions
 }
 
-func NewDepfileParser(options DepfileParserOptions) *DepfileParser {
+func NewDepfileParser(options *DepfileParserOptions) *DepfileParser {
 	ret := DepfileParser{}
 	ret.options_ = options
 	return &ret
@@ -20,7 +20,7 @@ func (this *DepfileParser) Parse(content, err *string) bool {
   // end: end of input.
   // parsing_targets: whether we are parsing targets or dependencies.
   char* in = &(*content)[0];
-  char* end = in + content->size();
+  char* end = in + content.size();
   have_target := false;
   parsing_targets := true;
   poisoned_input := false;
@@ -32,14 +32,14 @@ func (this *DepfileParser) Parse(content, err *string) bool {
     char* out = in;
     // filename: start of the current parsed filename.
     char* filename = out;
-    for (;;) {
+    for  {
       // start: beginning of the current parsed span.
       const char* start = in;
       char* yymarker = NULL;
       
     {
       unsigned char yych;
-      static const unsigned char yybm[] = {
+      yybm := []uint8{
           0,   0,   0,   0,   0,   0,   0,   0, 
           0,   0,   0,   0,   0,   0,   0,   0, 
           0,   0,   0,   0,   0,   0,   0,   0, 
@@ -79,10 +79,16 @@ func (this *DepfileParser) Parse(content, err *string) bool {
       }
       if (yych <= '\r') {
         if (yych <= '\t') {
-          if (yych >= 0x01) goto yy4;
+          if (yych >= 0x01) {
+			  goto yy4
+		  }
         } else {
-          if (yych <= '\n') goto yy6;
-          if (yych <= '\f') goto yy4;
+          if (yych <= '\n') {
+			  goto yy6
+		  }
+          if (yych <= '\f') {
+			  goto yy4
+		  }
           goto yy8;
         }
       } else {
@@ -101,12 +107,12 @@ func (this *DepfileParser) Parse(content, err *string) bool {
           goto yy4;
         }
       }
-      ++in;
+      in++
       {
         break;
       }
 yy4:
-      ++in;
+      in++
 yy5:
       {
         // For any other character (e.g. whitespace), swallow it here,
@@ -114,7 +120,7 @@ yy5:
         break;
       }
 yy6:
-      ++in;
+      in++
       {
         // A newline ends the current file name and the current rule.
         have_newline = true;
@@ -134,7 +140,7 @@ yy9:
 yy11:
       {
         // Got a span of plain text.
-        int len = (int)(in - start);
+        len := int(in - start);
         // Need to shift it over if we're overwriting backslashes.
         if (out < start) {
 			memmove(out, start, len)
@@ -185,17 +191,17 @@ yy13:
         }
       }
 yy14:
-      ++in;
+      in++
       {
         // De-escape dollar character.
         *out++ = '$';
         continue;
       }
 yy16:
-      ++in;
+      in++
       goto yy11;
 yy17:
-      ++in;
+      in++
       {
         // A line continuation ends the current file name.
         break;
@@ -208,11 +214,11 @@ yy19:
       in = yymarker;
       goto yy5;
 yy21:
-      ++in;
+      in++
       {
-        // 2N+1 backslashes plus space -> N backslashes plus space.
-        int len = (int)(in - start);
-        int n = len / 2 - 1;
+        // 2N+1 backslashes plus space . N backslashes plus space.
+        len := int(in - start);
+        n := len / 2 - 1;
         if (out < start) {
 			memset(out, '\\', n)
 		}
@@ -221,10 +227,10 @@ yy21:
         continue;
       }
 yy23:
-      ++in;
+      in++
       {
         // De-escape hash sign, but preserve other leading backslashes.
-        int len = (int)(in - start);
+         len := int(in - start);
         if (len > 2 && out < start) {
 			memset(out, '\\', len-2)
 		}
@@ -257,7 +263,7 @@ yy26:
         // De-escape colon sign, but preserve other leading backslashes.
         // Regular expression uses lookahead to make sure that no whitespace
         // nor EOF follows. In that case it'd be the : at the end of a target
-        int len = (int)(in - start);
+        len := int(in - start);
         if (len > 2 && out < start) {
 			memset(out, '\\', len-2)
 		}
@@ -302,11 +308,11 @@ yy27:
         }
       }
 yy28:
-      ++in;
+      in++
       {
         // Backslash followed by : and whitespace.
         // It is therefore normal text and not an escaped colon
-        int len = (int)(in - start - 1);
+        len := (int)(in - start - 1);
         // Need to shift it over if we're overwriting backslashes.
         if (out < start) {
 			memmove(out, start, len)
@@ -318,10 +324,10 @@ yy28:
         break;
       }
 yy30:
-      ++in;
+      in++
       {
-        // 2N backslashes plus space -> 2N backslashes, end of filename.
-        int len = (int)(in - start);
+        // 2N backslashes plus space . 2N backslashes, end of filename.
+        len := int(in - start);
         if (out < start) {
 			memset(out, '\\', len-1)
 		}
@@ -368,8 +374,8 @@ yy32:
 
     }
 
-    int len = (int)(out - filename);
-    const bool is_dependency = !parsing_targets;
+    len := int(out - filename);
+     is_dependency := !parsing_targets;
     if (len > 0 && filename[len - 1] == ':') {
       len--;  // Strip off trailing colon, if any.
       parsing_targets = false;
@@ -378,21 +384,21 @@ yy32:
 
     if (len > 0) {
       is_empty = false;
-      StringPiece piece = StringPiece(filename, len);
+       piece := string(filename, len);
       // If we've seen this as an input before, skip it.
-      std::vector<StringPiece>::iterator pos = std::find(ins_.begin(), ins_.end(), piece);
-      if (pos == ins_.end()) {
+      pos := std::find(this.ins_.begin(), this.ins_.end(), piece);
+      if (pos == this.ins_.end()) {
         if (is_dependency) {
           if (poisoned_input) {
             *err = "inputs may not also have inputs";
             return false;
           }
           // New input.
-          ins_.push_back(piece);
+			this.ins_ = append(this.ins_ , piece)
         } else {
           // Check for a new output.
-          if (std::find(outs_.begin(), outs_.end(), piece) == outs_.end()){
-				outs_.push_back(piece)
+          if (std::find(this.outs_.begin(), this.outs_.end(), piece) == this.outs_.end()){
+				this.outs_ = append(this.outs_ , piece)
 		  }
         }
       } else if (!is_dependency) {

@@ -8,6 +8,39 @@ import (
 	"runtime"
 )
 
+func islatinalpha(c int) bool {
+	// isalpha() is locale-dependent.
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+}
+
+func StripAnsiEscapeCodes(in string) string {
+	stripped := ""
+	// stripped.reserve(in.size());
+
+	for i := 0; i < len(in); i++ {
+		if in[i] != '\033' {
+			// Not an escape code.
+			stripped += in[i]
+			continue
+		}
+
+		// Only strip CSIs for now.
+		if i+1 >= len(in) {
+			break
+		}
+		if in[i+1] != '[' {
+			continue
+		} // Not a CSI.
+		i += 2
+
+		// Skip everything up to and including the next [a-zA-Z].
+		for i < len(in) && !islatinalpha(in[i]) {
+			i++
+		}
+	}
+	return stripped
+}
+
 func CanonicalizePath(path *string, slash_bits *uint64) {
 	// 确保路径是绝对的
 	absPath, err := filepath.Abs(*path)

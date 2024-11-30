@@ -2,9 +2,11 @@ package main
 
 import (
 	"bufio"
-	"fmt"
+  "errors"
+  "fmt"
 	"io"
 	"os"
+  "strconv"
 )
 
 func NewBuildLog() *BuildLog {
@@ -37,13 +39,14 @@ func (this *BuildLog) RecordCommand(edge *Edge, start_time int, end_time int, mt
    command_hash := HashCommand(command);
   for _,out :=range edge.outputs_ {
     path := out.path();
-    i := this.entries_.find(path);
+    second,ok := this.entries_[path]
     var log_entry *LogEntry =nil
-    if (i != this.entries_.end()) {
-      log_entry = i.second;
+    if ok {
+      log_entry = second;
     } else {
       log_entry = NewLogEntry(path);
-      this.entries_.insert(Entries::value_type(log_entry.output, log_entry));
+      item := Entries::value_type(log_entry.output, log_entry)
+      this.entries_[item] = true
     }
     log_entry.command_hash = command_hash;
     log_entry.start_time = start_time;
@@ -54,10 +57,12 @@ func (this *BuildLog) RecordCommand(edge *Edge, start_time int, end_time int, mt
       return false;
     }
     if  this.log_file_!=nil {
-      if !this.WriteEntry(this.log_file_, *log_entry) {
+      _,err1 := this.WriteEntry(this.log_file_, log_entry)
+      if err1!=nil {
 		  return false
 	  }
-      if (fflush(this.log_file_) != 0) {
+      err1 = this.log_file_.Sync()
+      if err1!=nil {
           return false;
       }
     }
@@ -75,12 +80,12 @@ func (this *BuildLog) Close() {
 // / Load the on-disk log.
 func (this *BuildLog) Load(path string, err *string) LoadStatus {
   METRIC_RECORD(".ninja_log load");
-  file := os.OpenFile(path, "r");
-  if (!file) {
-    if (errno == ENOENT) {
+  file,err1 := os.Open(path);
+  if err1!=nil {
+    if errors.Is(err1, os.ErrNotExist) {
 		return LOAD_NOT_FOUND
 	}
-    *err = strerror(errno);
+    *err = err1.Error()
     return LOAD_ERROR;
   }
 
@@ -89,10 +94,10 @@ func (this *BuildLog) Load(path string, err *string) LoadStatus {
   total_entry_count := 0
 
    reader := NewLineReader(file);
-  char* line_start = 0;
-  char* line_end = 0;
-  while (reader.ReadLine(&line_start, &line_end)) {
-    if (!log_version) {
+   line_start := 0;
+  line_end := 0;
+  for reader.ReadLine(&line_start, &line_end) {
+    if log_version==0 {
       sscanf(line_start, kFileSignature, &log_version);
 
       invalid_log_version := false;
@@ -105,8 +110,8 @@ func (this *BuildLog) Load(path string, err *string) LoadStatus {
         *err = "build log version is too new; starting over";
       }
       if (invalid_log_version) {
-        fclose(file);
-        unlink(path);
+        file.Close()
+        os.RemoveAll(path)
         // Don't report this as a failure. A missing build log will cause
         // us to rebuild the outputs anyway.
         return LOAD_NOT_FOUND;
@@ -114,7 +119,7 @@ func (this *BuildLog) Load(path string, err *string) LoadStatus {
     }
 
     // If no newline was found in this chunk, read the next.
-    if (!line_end) {
+    if line_end==0 {
       continue
     }
 
@@ -122,7 +127,7 @@ func (this *BuildLog) Load(path string, err *string) LoadStatus {
 
     start := line_start;
     end := static_cast<char*>(memchr(start, kFieldSeparator, line_end - start));
-    if (!end) {
+    if  end == 0 {
       continue
     }
     *end = 0;
@@ -131,7 +136,7 @@ func (this *BuildLog) Load(path string, err *string) LoadStatus {
     end_time := 0;
      var mtime TimeStamp = 0;
 
-    start_time = atoi(start);
+    start_time,_ = strconv.Atoi(start)
     start = end + 1;
 
     end = static_cast<char*>(memchr(start, kFieldSeparator, line_end - start));
@@ -139,19 +144,19 @@ func (this *BuildLog) Load(path string, err *string) LoadStatus {
       continue
     }
     *end = 0;
-    end_time = atoi(start);
+    end_time,_ = strconv.Atoi(start);
     start = end + 1;
 
     end = static_cast<char*>(memchr(start, kFieldSeparator, line_end - start));
-    if (!end) {
+    if end==0 {
       continue
     }
     *end = 0;
-    mtime = strtoll(start, NULL, 10);
+    mtime = strtoll(start, nil, 10);
     start = end + 1;
 
     end = static_cast<char*>(memchr(start, kFieldSeparator, line_end - start));
-    if (!end) {
+    if end==0 {
       continue
     }
     output := string(start, end - start);
@@ -164,22 +169,23 @@ func (this *BuildLog) Load(path string, err *string) LoadStatus {
     if (i != this.entries_.end()) {
       entry = i.second;
     } else {
-      entry = new LogEntry(output);
+      entry = NewLogEntry(output);
       this.entries_.insert(Entries::value_type(entry.output, entry));
-      ++unique_entry_count;
+      unique_entry_count++
     }
-    ++total_entry_count;
+    total_entry_count++
 
     entry.start_time = start_time;
     entry.end_time = end_time;
     entry.mtime = mtime;
-    char c = *end; *end = '\0';
+    c := *end
+    *end = '\0';
     entry.command_hash = (uint64_t)strtoull(start, NULL, 16);
     *end = c;
   }
   file.Close()
 
-  if (!line_start) {
+  if line_start==0 {
     return LOAD_SUCCESS; // file was empty
   }
 
@@ -200,9 +206,9 @@ func (this *BuildLog) Load(path string, err *string) LoadStatus {
 
 // / Lookup a previously-run command by its output path.
 func (this *BuildLog) LookupByOutput(path string) *LogEntry {
-  i := this.entries_.find(path);
-  if (i != this.entries_.end()) {
-    return i.second
+  i,ok := this.entries_[path]
+  if ok {
+    return i
   }
   return nil
 }
@@ -221,44 +227,47 @@ func (this *BuildLog) Recompact(path string, user BuildLogUser, err *string) boo
 
   this.Close();
   temp_path := path + ".recompact";
-  f := os.OpenFile(temp_path, "wb");
-  if !f{
-    *err = strerror(errno);
+  f,err1 := os.OpenFile(temp_path,  os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644);
+  if err1!=nil {
+    *err =err1.Error()
     return false;
   }
-
-  if (fprintf(f, kFileSignature, kCurrentVersion) < 0) {
-    *err = strerror(errno);
+  _,err1 = fmt.Fprintf(f, kFileSignature, kCurrentVersion)
+  if err1!=nil {
+    *err = err1.Error()
     f.Close()
     return false;
   }
 
   dead_outputs :=[]string{}
-  for i := range this.entries_ {
-    if (user.IsPathDead(i.first)) {
-      dead_outputs.push_back(i.first);
+  for first,second := range this.entries_ {
+    if user.IsPathDead(first) {
+      dead_outputs = append(dead_outputs, first)
       continue;
     }
 
-    if (!WriteEntry(f, *i.second)) {
-      *err = strerror(errno);
+    _,err1 := this.WriteEntry(f, second)
+    if err1!=nil {
+      *err = err1.Error()
       f.Close()
       return false;
     }
   }
 
-  for (size_t i = 0; i < dead_outputs.size(); ++i){
-    entries_.erase(dead_outputs[i])
+  for i := 0; i < len(dead_outputs); i++ {
+    delete(this.entries_, dead_outputs[i])
   }
 
   f.Close()
-  if (unlink(path) < 0) {
-    *err = strerror(errno);
+  err1 = os.RemoveAll(path)
+  if err1!=nil {
+    *err = err1.Error()
     return false;
   }
 
-  if (rename(temp_path, path) < 0) {
-    *err = strerror(errno);
+  err1 = os.Rename(temp_path, path)
+  if err1!=nil {
+    *err = err1.Error()
     return false;
   }
 
@@ -292,7 +301,7 @@ func (this *BuildLog) Restat(path string, disk_interface DiskInterface, outputs 
       }
     }
     if (!skip) {
-      var mtime TimeStamp = disk_interface.Stat(i.second.output, err);
+      var mtime TimeStamp = disk_interface.Stat(second.output, err);
       if (mtime == -1) {
         return false;
       }

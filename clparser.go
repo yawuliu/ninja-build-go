@@ -14,18 +14,20 @@ type CLParser struct {
 // / Exposed for testing.
 func FilterShowIncludes(line string, deps_prefix string) string {
 	kDepsPrefixEnglish := "Note: including file: ";
-	 in := line
+	in := 0
 	end := in + len(line)
-	prefix := deps_prefix.empty() ? kDepsPrefixEnglish : deps_prefix;
-	if (end - in > (int)prefix.size() &&
-		memcmp(in, prefix.c_str(), (int)prefix.size()) == 0) {
-		in += prefix.size();
+	prefix :=  deps_prefix;
+	if deps_prefix=="" {
+		prefix = kDepsPrefixEnglish
+	}
+	if end - in > len(prefix) &&  memcmp(in, prefix, len(prefix)) == 0 {
+		in += len(prefix)
 		for (*in == ' ') {
 			in++
 		}
 		return line[in - line]
 	}
-	return "";
+	return ""
 }
 
 // / Return true if a mentioned include file is a system path.
@@ -33,8 +35,8 @@ func FilterShowIncludes(line string, deps_prefix string) string {
 func IsSystemInclude(path string) bool {
 	transform(path.begin(), path.end(), path.begin(), ToLowerASCII);
 	// TODO: this is a heuristic, perhaps there's a better way?
-	return (path.find("program files") != string::npos ||
-		path.find("microsoft visual studio") != string::npos);
+	return strings.Contains(path, "program files")  ||
+		strings.Contains(path, "microsoft visual studio") ;
 }
 
 // / Parse a line of cl.exe output and return true if it looks like
@@ -58,23 +60,23 @@ func (this *CLParser) Parse(output *string, deps_prefix string, filtered_output 
   METRIC_RECORD("CLParser::Parse");
 
   // Loop over all lines in the output to process them.
-  if (&output != filtered_output) {
+  if output != filtered_output {
 	  panic("&output != filtered_output")
   }
   start := 0;
   seen_show_includes := false;
-  IncludesNormalize normalizer(".");
+  normalizer := NewIncludesNormalize(".");
 
 
-  while (start < output.size()) {
-    size_t end = output.find_first_of("\r\n", start);
+  for start < len(*output) {
+     end := output.find_first_of("\r\n", start);
     if (end == string::npos){
 			end = output.size()
 		}
     line := output.substr(start, end - start);
 
     include := FilterShowIncludes(line, deps_prefix);
-    if (!include.empty()) {
+    if include!="" {
       seen_show_includes = true;
       normalized := ""
       if (!this.normalizer.Normalize(include, &normalized, err)) {
@@ -89,8 +91,8 @@ func (this *CLParser) Parse(output *string, deps_prefix string, filtered_output 
       // TODO: if we support compiling multiple output files in a single
       // cl.exe invocation, we should stash the filename.
     } else {
-      filtered_output.append(line);
-      filtered_output.append("\n");
+      *filtered_output += line
+      *filtered_output+="\n"
     }
 
     if (end < len(*output) && output[end] == '\r') {

@@ -107,6 +107,10 @@ func (this *Plan) EdgeFinished(edge *Edge,  result EdgeResult, err  *string) boo
   return true;
 }
 
+func MEM_FN(){
+
+}
+
 /// Clean the given node during the build.
 /// Return false on error.
 func (this *Plan) CleanNode(scan *DependencyScan,  node *Node, err *string) bool{
@@ -114,7 +118,7 @@ func (this *Plan) CleanNode(scan *DependencyScan,  node *Node, err *string) bool
 
   for _,oe := range node.out_edges() {
     // Don't process edges that we don't actually want.
-    want_e,ok := this.want_[oe]
+    want_e, ok := this.want_[oe]
     if !ok || want_e == kWantNothing {
       continue
     }
@@ -125,36 +129,44 @@ func (this *Plan) CleanNode(scan *DependencyScan,  node *Node, err *string) bool
     }
     // If all non-order-only inputs for this edge are now clean,
     // we might have changed the dirty state of the outputs.
-     begin := oe.inputs_.begin()
-    end := oe.inputs_.end() - oe.order_only_deps_
-    if (find_if(begin, end, MEM_FN(&Node::dirty)) == end) {
+    begin := 0
+    end := len(oe.inputs_) - oe.order_only_deps_
+    found := false
+    for i := begin; i < end; i++ {
+      if oe.inputs_[i].dirty() {
+        found = true
+        break
+      }
+    }
+    if found {
       // Recompute most_recent_input.
       var most_recent_input *Node = nil
-      for _,i := range begin {
-        if !most_recent_input || i.mtime() > most_recent_input.mtime()
-          most_recent_input = i;
-      }
-
-      // Now, this edge is dirty if any of the outputs are dirty.
-      // If the edge isn't dirty, clean the outputs and mark the edge as not
-      // wanted.
-      outputs_dirty := false;
-      if (!scan.RecomputeOutputsDirty(oe, most_recent_input, &outputs_dirty, err)) {
-        return false;
-      }
-      if (!outputs_dirty) {
-        for _,o := range oe.outputs_.begin(){
-          if (!this.CleanNode(scan, o, err)) {
-            return false
-          }
+      for i := begin; i < end; i++ {
+        if most_recent_input == nil || oe.inputs_[i].mtime() > most_recent_input.mtime() {
+          most_recent_input = oe.inputs_[i];
         }
 
-        want_e.second = kWantNothing;
-        this.wanted_edges_--
-        if !oe.is_phony() {
-          this.command_edges_--
-          if this.builder_!=nil {
-            this.builder_.status_.EdgeRemovedFromPlan(oe)
+        // Now, this edge is dirty if any of the outputs are dirty.
+        // If the edge isn't dirty, clean the outputs and mark the edge as not
+        // wanted.
+        outputs_dirty := false;
+        if !scan.RecomputeOutputsDirty(oe, most_recent_input, &outputs_dirty, err) {
+          return false
+        }
+        if !outputs_dirty {
+          for _, o := range oe.outputs_ {
+            if !this.CleanNode(scan, o, err) {
+              return false
+            }
+          }
+
+          this.want_[oe] = kWantNothing;
+          this.wanted_edges_--
+          if !oe.is_phony() {
+            this.command_edges_--
+            if this.builder_ != nil {
+              this.builder_.status_.EdgeRemovedFromPlan(oe)
+            }
           }
         }
       }
@@ -185,7 +197,7 @@ func (this *Plan) PrepareQueue() {
 func (this *Plan)  DyndepsLoaded(scan *DependencyScan, node *Node, ddf DyndepFile,  err *string) bool {
   // Recompute the dirty state of all our direct and indirect dependents now
   // that our dyndep information has been loaded.
-  if (!this.RefreshDyndepDependents(scan, node, err)) {
+  if !this.RefreshDyndepDependents(scan, node, err) {
     return false
   }
 
@@ -195,7 +207,7 @@ func (this *Plan)  DyndepsLoaded(scan *DependencyScan, node *Node, ddf DyndepFil
   // of the graph through the dyndep-discovered dependencies.
 
   // Find edges in the the build plan for which we have new dyndep info.
-  dyndep_roots := []DyndepFile{}
+  dyndep_roots := []*Dyndeps{}
   for first,oe := range ddf {
     edge := first;
 
@@ -219,9 +231,8 @@ func (this *Plan)  DyndepsLoaded(scan *DependencyScan, node *Node, ddf DyndepFil
   // Walk dyndep-discovered portion of the graph to add it to the build plan.
   dyndep_walk := set.New()// std::set<Edge*>
   for _,oei := range dyndep_roots {
-    oe := oei;
-    for _,i := range  oe.second.implicit_inputs_ {
-      if !this.AddSubTarget(*i, oe.first.outputs_[0], err, &dyndep_walk) && !err.empty() {
+    for _,i := range  oei.implicit_inputs_ {
+      if !this.AddSubTarget(i, oei.outputs_[0], err, &dyndep_walk) && *err!="" {
         return false;
       }
     }
@@ -234,19 +245,20 @@ func (this *Plan)  DyndepsLoaded(scan *DependencyScan, node *Node, ddf DyndepFil
     if (want_e == this.want_.end()) {
       continue
     }
-    dyndep_walk.insert(want_e.first);
+    dyndep_walk.Add(want_e.first);
   }
 
   // See if any encountered edges are now ready.
-  for _,wi := range dyndep_walk {
-    want_e :=this.want_.find(*wi);
-    if (want_e == this.want_.end()) {
-      continue
+  dyndep_walk.Iterate(func(wi interface{}) bool {
+    want_e,ok :=this.want_[wi]
+    if !ok {
+     return
     }
     if !this.EdgeMaybeReady(want_e, err) {
       return false
     }
-  }
+    return
+  })
 
   return true;
 }
@@ -376,7 +388,8 @@ func (this *Plan)  RefreshDyndepDependents(scan *DependencyScan, node *Node, err
     // Add any validation nodes found during RecomputeDirty as new top level
     // targets.
     for _,v := range validation_nodes{
-      if in_edge := v.in_edge() {
+      in_edge :=  v.in_edge()
+      if in_edge!=nil {
         if (!in_edge.outputs_ready() &&  !this.AddTarget(v, err)) {
           return false;
         }
@@ -741,17 +754,17 @@ func (this*Builder)  Build(err *string) bool {
   if !this.AlreadyUpToDate() {
     panic("!AlreadyUpToDate() ")
   }
-	this.plan_.PrepareQueue();
+  this.plan_.PrepareQueue();
 
   pending_commands := 0;
   failures_allowed := this.config_.failures_allowed;
 
   // Set up the command runner if we haven't done so already.
-  if !this.command_runner_.get() {
+  if this.command_runner_==nil {
     if this.config_.dry_run {
 		this.command_runner_.reset(NewDryRunCommandRunner)
 	}else{
-		 this.command_runner_.reset(CommandRunner::factory(this.config_))
+		 this.command_runner_.reset(CommandRunnerfactory(this.config_))
 	}
   }
 
@@ -784,9 +797,9 @@ func (this*Builder)  Build(err *string) bool {
         }
 
         if (edge.is_phony()) {
-          if (!this.plan_.EdgeFinished(edge, Plan::kEdgeSucceeded, err)) {
-            Cleanup();
-            status_.BuildFinished();
+          if (!this.plan_.EdgeFinished(edge, kEdgeSucceeded, err)) {
+            this.Cleanup();
+            this.status_.BuildFinished();
             return false;
           }
         } else {

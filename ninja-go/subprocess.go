@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"os/exec"
 	"sync"
-	"syscall"
-	"unsafe"
 )
 
 type Subprocess struct {
@@ -13,21 +11,6 @@ type Subprocess struct {
 	output       string
 	wg           sync.WaitGroup
 	use_console_ bool
-}
-
-func NewSubprocess(command string, use_console bool) *Subprocess {
-	return &Subprocess{
-		cmd:          exec.Command("cmd", "/c", command),
-		use_console_: use_console,
-	}
-}
-
-func (this *Subprocess) Finish() ExitStatus {
-	return this.Wait()
-}
-
-func (this *Subprocess) Done() bool {
-	return this.cmd.ProcessState.Exited()
 }
 
 func (this *Subprocess) GetOutput() string {
@@ -45,10 +28,6 @@ func (this *Subprocess) Clear() {
 	//	this.Finish()
 	//}
 }
-func (s *Subprocess) Wait() ExitStatus {
-	s.wg.Wait()
-	return s.determineExitStatus()
-}
 
 // captureOutput captures the output of the subprocess.
 func (s *Subprocess) captureOutput() {
@@ -59,18 +38,6 @@ func (s *Subprocess) captureOutput() {
 	} else {
 		s.output = string(out)
 	}
-}
-
-// determineExitStatus determines the exit status of the subprocess.
-func (s *Subprocess) determineExitStatus() ExitStatus {
-	if s.cmd.ProcessState.Exited() {
-		if s.cmd.ProcessState.ExitCode() == 0 {
-			return ExitSuccess
-		} else if s.cmd.ProcessState.ExitCode() == 3 {
-			return ExitInterrupted
-		}
-	}
-	return ExitFailure
 }
 
 func (this *Subprocess) Start(set *SubprocessSet, command string) bool {
@@ -96,19 +63,6 @@ type SubprocessSet struct {
 	finished_ []*Subprocess // std::queue<Subprocess*>
 }
 
-// ioport_ is the I/O completion port for the subprocess set.
-var ioport_ syscall.Handle
-
-// NewSubprocessSet creates a new SubprocessSet.
-func NewSubprocessSet() *SubprocessSet {
-	var err error
-	ioport_, err = syscall.CreateIoCompletionPort(syscall.InvalidHandle, 0, 0, 1)
-	if err != nil {
-		panic(err)
-	}
-	return &SubprocessSet{}
-}
-
 // Add adds a new subprocess to the set.
 func (this *SubprocessSet) Add(command string, useConsole bool) *Subprocess {
 	sub := NewSubprocess(command, useConsole)
@@ -117,28 +71,6 @@ func (this *SubprocessSet) Add(command string, useConsole bool) *Subprocess {
 	}
 	this.running_ = append(this.running_, sub)
 	return sub
-}
-
-// DoWork waits for any state change in subprocesses.
-func (s *SubprocessSet) DoWork() bool {
-	var bytesRead uint32
-	var key uint32
-	var overlapped *syscall.Overlapped
-
-	err := syscall.GetQueuedCompletionStatus(ioport_, &bytesRead, &key, &overlapped, syscall.INFINITE)
-	if err != nil {
-		panic(err)
-	}
-
-	sub := *(**Subprocess)(unsafe.Pointer(&key))
-	sub.OnPipeReady()
-
-	if sub.Done() {
-		s.running_ = removeSubprocess(s.running_, sub)
-		s.finished_ = append(s.finished_, sub)
-	}
-
-	return false
 }
 
 // NextFinished returns the next finished subprocess.
@@ -158,11 +90,6 @@ func (s *SubprocessSet) Clear() {
 		sub.cmd.Wait()
 	}
 	s.running_ = nil
-}
-
-// Close closes the I/O completion port.
-func (s *SubprocessSet) Close() {
-	syscall.CloseHandle(ioport_)
 }
 
 func removeSubprocess(slice []*Subprocess, sub *Subprocess) []*Subprocess {

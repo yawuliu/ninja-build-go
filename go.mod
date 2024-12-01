@@ -1,6 +1,6 @@
 module ninja-build-go
 
-go 1.20
+go 1.23
 
 require (
 	git.sr.ht/~sircmpwn/getopt v1.0.0

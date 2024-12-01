@@ -31,7 +31,7 @@ type RunningEdgeMap map[*Edge]int
 type Builder struct {
 	state_          *State
 	config_         *BuildConfig
-	plan_           Plan
+	plan_           *Plan
 	command_runner_ CommandRunner
 	status_         Status
 

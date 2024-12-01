@@ -340,7 +340,7 @@ func (this *BuildLog) OpenForWriteIfNeeded() bool {
 }
 
 func HashCommand(command string) uint64 {
-	return rapidhash(command)
+	return rapidhash([]byte(command), len(command))
 }
 
 // Used by tests.

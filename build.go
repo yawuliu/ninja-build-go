@@ -1,70 +1,10 @@
 package main
 
 import (
-	"fmt"
 	"github.com/edwingeng/deque"
 	"log"
+	"math"
 )
-
-type Plan struct {
-	/// Keep track of which edges we want to build in this plan.  If this map does
-	/// not contain an entry for an edge, we do not want to build the entry or its
-	/// dependents.  If it does contain an entry, the enumeration indicates what
-	/// we want for the edge.
-	want_ map[*Edge]Want
-
-	ready_ EdgePriorityQueue
-
-	builder_ *Builder
-	/// user provided targets in build order, earlier one have higher priority
-	targets_ []*Node
-
-	/// Total number of edges that have commands (not phony).
-	command_edges_ int
-
-	/// Total remaining number of wanted edges.
-	wanted_edges_ int
-}
-
-func NewPlan(builder *Builder) *Plan {
-	return &Plan{builder_: builder, want_: make(map[*Edge]Want)}
-}
-
-// / Add a target to our plan (including all its dependencies).
-// / Returns false if we don't need to build this target; may
-// / fill in |err| with an error message if there's a problem.
-func (p *Plan) AddTarget(target *Node, err *string) bool {
-	// 实现添加目标到计划的逻辑
-	return true
-}
-
-// Pop a ready edge off the queue of edges to build.
-// Returns NULL if there's no work to do.
-func (this *Plan) FindWork() *Edge {
-	if this.ready_.IsEmpty() {
-		return nil
-	}
-
-	work := this.ready_.Poll()
-	return work.(*Edge)
-}
-
-// / Returns true if there's more work to be done.
-func (p *Plan) more_to_do() bool {
-	return p.wanted_edges_ > 0 && p.command_edges_ > 0
-}
-
-// / Dumps the current state of the plan.
-func (this *Plan) Dump() {
-	fmt.Printf("pending: %d\n", len(this.want_))
-	for first, second := range this.want_ {
-		if second != kWantNothing {
-			fmt.Printf("want ")
-		}
-		first.Dump("")
-	}
-	fmt.Printf("ready: %d\n", this.ready_.Size())
-}
 
 type EdgeResult int8
 
@@ -72,194 +12,6 @@ const (
 	kEdgeFailed    EdgeResult = 0
 	kEdgeSucceeded EdgeResult = 1
 )
-
-// / Mark an edge as done building (whether it succeeded or failed).
-// / If any of the edge's outputs are dyndep bindings of their dependents,
-// / this loads dynamic dependencies from the nodes' paths.
-// / Returns 'false' if loading dyndep info fails and 'true' otherwise.
-func (this *Plan) EdgeFinished(edge *Edge, result EdgeResult, err *string) bool {
-	second, ok := this.want_[edge]
-	if !ok {
-		panic("e != want_.end()")
-	}
-	directly_wanted := second != kWantNothing
-
-	// See if this job frees up any delayed jobs.
-	if directly_wanted {
-		edge.pool().EdgeFinished(edge)
-	}
-	edge.pool().RetrieveReadyEdges(this.ready_)
-
-	// The rest of this function only applies to successful commands.
-	if result != kEdgeSucceeded {
-		return true
-	}
-
-	if directly_wanted {
-		this.wanted_edges_--
-	}
-	delete(this.want_, edge)
-	edge.outputs_ready_ = true
-
-	// Check off any nodes we were waiting for with this edge.
-	for _, o := range edge.outputs_ {
-		if !this.NodeFinished(o, err) {
-			return false
-		}
-	}
-	return true
-}
-
-// / Clean the given node during the build.
-// / Return false on error.
-func (this *Plan) CleanNode(scan *DependencyScan, node *Node, err *string) bool {
-	node.set_dirty(false)
-
-	for _, oe := range node.out_edges() {
-		// Don't process edges that we don't actually want.
-		want_e, ok := this.want_[oe]
-		if !ok || want_e == kWantNothing {
-			continue
-		}
-
-		// Don't attempt to clean an edge if it failed to load deps.
-		if oe.deps_missing_ {
-			continue
-		}
-		// If all non-order-only inputs for this edge are now clean,
-		// we might have changed the dirty state of the outputs.
-		begin := 0
-		end := len(oe.inputs_) - oe.order_only_deps_
-		found := false
-		for i := begin; i < end; i++ {
-			if oe.inputs_[i].dirty() {
-				found = true
-				break
-			}
-		}
-		if found {
-			// Recompute most_recent_input.
-			var most_recent_input *Node = nil
-			for i := begin; i < end; i++ {
-				if most_recent_input == nil || oe.inputs_[i].mtime() > most_recent_input.mtime() {
-					most_recent_input = oe.inputs_[i]
-				}
-
-				// Now, this edge is dirty if any of the outputs are dirty.
-				// If the edge isn't dirty, clean the outputs and mark the edge as not
-				// wanted.
-				outputs_dirty := false
-				if !scan.RecomputeOutputsDirty(oe, most_recent_input, &outputs_dirty, err) {
-					return false
-				}
-				if !outputs_dirty {
-					for _, o := range oe.outputs_ {
-						if !this.CleanNode(scan, o, err) {
-							return false
-						}
-					}
-
-					this.want_[oe] = kWantNothing
-					this.wanted_edges_--
-					if !oe.is_phony() {
-						this.command_edges_--
-						if this.builder_ != nil {
-							this.builder_.status_.EdgeRemovedFromPlan(oe)
-						}
-					}
-				}
-			}
-		}
-	}
-	return true
-}
-
-// / Number of edges with commands to run.
-func (this *Plan) command_edge_count() int { return this.command_edges_ }
-
-// / Reset state.  Clears want and ready sets.
-func (this *Plan) Reset() {
-	this.command_edges_ = 0
-	this.wanted_edges_ = 0
-	this.ready_.Clear()
-	this.want_ = map[*Edge]Want{}
-}
-
-// After all targets have been added, prepares the ready queue for find work.
-func (this *Plan) PrepareQueue() {
-	this.ComputeCriticalPath()
-	this.ScheduleInitialEdges()
-}
-
-// / Update the build plan to account for modifications made to the graph
-// / by information loaded from a dyndep file.
-func (this *Plan) DyndepsLoaded(scan *DependencyScan, node *Node, ddf DyndepFile, err *string) bool {
-	// Recompute the dirty state of all our direct and indirect dependents now
-	// that our dyndep information has been loaded.
-	if !this.RefreshDyndepDependents(scan, node, err) {
-		return false
-	}
-
-	// We loaded dyndep information for those out_edges of the dyndep node that
-	// specify the node in a dyndep binding, but they may not be in the plan.
-	// Starting with those already in the plan, walk newly-reachable portion
-	// of the graph through the dyndep-discovered dependencies.
-
-	// Find edges in the the build plan for which we have new dyndep info.
-	dyndep_roots := []*Dyndeps{}
-	for first, oe := range ddf {
-		edge := first
-
-		// If the edge outputs are ready we do not need to consider it here.
-		if edge.outputs_ready() {
-			continue
-		}
-
-		_, ok := this.want_[edge]
-
-		// If the edge has not been encountered before then nothing already in the
-		// plan depends on it so we do not need to consider the edge yet either.
-		if !ok {
-			continue
-		}
-
-		// This edge is already in the plan so queue it for the walk.
-		dyndep_roots = append(dyndep_roots, oe)
-	}
-
-	// Walk dyndep-discovered portion of the graph to add it to the build plan.
-	dyndep_walk := map[*Edge]bool{} // std::set<*>
-	for _, oei := range dyndep_roots {
-		for _, i := range oei.implicit_inputs_ {
-			if !this.AddSubTarget(i, oei.outputs_[0], err, &dyndep_walk) && *err != "" {
-				return false
-			}
-		}
-	}
-
-	// Add out edges from this node that are in the plan (just as
-	// Plan::NodeFinished would have without taking the dyndep code path).
-	for _, oe := range node.out_edges() {
-		_, ok := this.want_[oe]
-		if !ok {
-			continue
-		}
-		dyndep_walk[oe] = true
-	}
-
-	// See if any encountered edges are now ready.
-	for wi, _ := range dyndep_walk {
-		want_e, ok := this.want_[wi]
-		if !ok {
-			continue
-		}
-		if !this.EdgeMaybeReady(want_e, err) {
-			return false
-		}
-	}
-
-	return true
-}
 
 // / Enumerate possible steps we want for an edge.
 type Want int8
@@ -274,55 +26,6 @@ const (
 	/// for it to complete.
 	kWantToFinish Want = 2
 )
-
-func (this *Plan) ComputeCriticalPath() {
-	METRIC_RECORD("ComputeCriticalPath")
-
-	// Convenience class to perform a topological sort of all edges
-	// reachable from a set of unique targets. Usage is:
-	//
-	// 1) Create instance.
-	//
-	// 2) Call VisitTarget() as many times as necessary.
-	//    Note that duplicate targets are properly ignored.
-	//
-	// 3) Call result() to get a sorted list of edges,
-	//    where each edge appears _after_ its parents,
-	//    i.e. the edges producing its inputs, in the list.
-	//
-
-	topo_sort := TopoSort{}
-	for _, target := range this.targets_ {
-		topo_sort.VisitTarget(target)
-	}
-
-	sorted_edges := topo_sort.result()
-
-	// First, reset all weights to 1.
-	for _, edge := range sorted_edges {
-		edge.set_critical_path_weight(this.EdgeWeightHeuristic(edge))
-	}
-
-	// Second propagate / increment weights from
-	// children to parents. Scan the list
-	// in reverse order to do so.
-	for reverse_it := len(sorted_edges) - 1; reverse_it >= 0; reverse_it-- {
-		edge := sorted_edges[reverse_it]
-		edge_weight := edge.critical_path_weight()
-
-		for _, input := range edge.inputs_ {
-			producer := input.in_edge()
-			if producer == nil {
-				continue
-			}
-			producer_weight := producer.critical_path_weight()
-			candidate_weight := edge_weight + this.EdgeWeightHeuristic(producer)
-			if candidate_weight > producer_weight {
-				producer.set_critical_path_weight(candidate_weight)
-			}
-		}
-	}
-}
 
 type TopoSort struct {
 	// Implementation note:
@@ -339,7 +42,7 @@ type TopoSort struct {
 	//   which edges have already been visited.
 	//
 
-	visited_set_  []*Edge //std::unordered_set<
+	visited_set_  map[*Edge]bool //std::unordered_set<
 	sorted_edges_ []*Edge
 }
 
@@ -353,10 +56,11 @@ func (this *TopoSort) VisitTarget(target *Node) {
 func (this *TopoSort) result() []*Edge { return this.sorted_edges_ }
 
 func (this *TopoSort) Visit(edge *Edge) {
-	insertion := this.visited_set_.emplace(edge)
-	if !insertion.second {
+	_, exists := this.visited_set_[edge]
+	if exists {
 		return
 	}
+	this.visited_set_[edge] = true
 	for _, input := range edge.inputs_ {
 		producer := input.in_edge()
 		if producer != nil {
@@ -365,221 +69,6 @@ func (this *TopoSort) Visit(edge *Edge) {
 	}
 	this.sorted_edges_ = append(this.sorted_edges_, edge)
 }
-
-func (this *Plan) RefreshDyndepDependents(scan *DependencyScan, node *Node, err *string) bool {
-	// Collect the transitive closure of dependents and mark their edges
-	// as not yet visited by RecomputeDirty.
-	dependents := map[*Node]bool{} //set<Node*>
-	this.UnmarkDependents(node, &dependents)
-
-	// Update the dirty state of all dependents and check if their edges
-	// have become wanted.
-	for _, i := range dependents {
-		n := i
-
-		// Check if this dependent node is now dirty.  Also checks for new cycles.
-		validation_nodes := []*Node{}
-		if !scan.RecomputeDirty(n, validation_nodes, err) {
-			return false
-		}
-
-		// Add any validation nodes found during RecomputeDirty as new top level
-		// targets.
-		for _, v := range validation_nodes {
-			in_edge := v.in_edge()
-			if in_edge != nil {
-				if !in_edge.outputs_ready() && !this.AddTarget(v, err) {
-					return false
-				}
-			}
-		}
-		if !n.dirty() {
-			continue
-		}
-		// This edge was encountered before.  However, we may not have wanted to
-		// build it if the outputs were not known to be dirty.  With dyndep
-		// information an output is now known to be dirty, so we want the edge.
-		edge := n.in_edge()
-		if edge && !edge.outputs_ready() {
-			panic("edge && !edge.outputs_ready()")
-		}
-		want_e_second, ok := this.want_[edge]
-		if !ok {
-			panic("want_e != this.want_.end()")
-		}
-		if want_e_second == kWantNothing {
-			this.want_[edge] = kWantToStart
-			this.EdgeWanted(edge)
-		}
-	}
-	return true
-}
-func (this *Plan) UnmarkDependents(node *Node, dependents map[*Node]bool) { //map[*Node]bool
-	for _, oe := range node.out_edges() {
-		edge := oe
-
-		_, ok := this.want_[edge]
-		if !ok {
-			continue
-		}
-
-		if edge.mark_ != VisitNone {
-			edge.mark_ = VisitNone
-			for _, o := range edge.outputs_ {
-				_, ok := dependents[o]
-				if !ok {
-					this.UnmarkDependents(o, dependents)
-				}
-			}
-		}
-	}
-}
-func (this *Plan) AddSubTarget(node *Node, dependent *Node, err *string, dyndep_walk map[*Edge]bool) bool {
-	edge := node.in_edge()
-	if edge == nil {
-		// Leaf node, this can be either a regular input from the manifest
-		// (e.g. a source file), or an implicit input from a depfile or dyndep
-		// file. In the first case, a dirty flag means the file is missing,
-		// and the build should stop. In the second, do not do anything here
-		// since there is no producing edge to add to the plan.
-		if node.dirty() && !node.generated_by_dep_loader() {
-			referenced := ""
-			if dependent != nil {
-				referenced = ", needed by '" + dependent.path() + "',"
-			}
-			*err = "'" + node.path() + "'" + referenced +
-				" missing and no known rule to make it"
-		}
-		return false
-	}
-
-	if edge.outputs_ready() {
-		return false // Don't need to do anything.
-	}
-	// If an entry in want_ does not already exist for edge, create an entry which
-	// maps to kWantNothing, indicating that we do not want to build this entry itself.
-	this.want_[edge] = kWantNothing
-	want_ins := kWantNothing
-	want := kWantNothing
-
-	if dyndep_walk != nil && want == kWantToFinish {
-		return false // Don't need to do anything with already-scheduled edge.
-	}
-
-	// If we do need to build edge and we haven't already marked it as wanted,
-	// mark it now.
-	if node.dirty() && want == kWantNothing {
-		want = kWantToStart
-		this.EdgeWanted(edge)
-	}
-
-	if dyndep_walk != nil {
-		dyndep_walk[edge] = true
-	}
-
-	if !want_ins.second {
-		return true // We've already processed the inputs.
-	}
-
-	for _, i := range edge.inputs_ {
-		if !this.AddSubTarget(*i, node, err, dyndep_walk) && !err.empty() {
-			return false
-		}
-	}
-
-	return true
-}
-
-// Add edges that kWantToStart into the ready queue
-// Must be called after ComputeCriticalPath and before FindWork
-func (this *Plan) ScheduleInitialEdges() {
-	// Add ready edges to queue.
-	if this.ready_.IsEmpty() {
-		panic("ready_.empty()")
-	}
-	pools := map[*Pool]bool{} // std::set<*>
-
-	for first, second := range this.want_ {
-		edge := first
-		want := second
-		if want == kWantToStart && edge.AllInputsReady() {
-			pool := edge.pool()
-			if pool.ShouldDelayEdge() {
-				pool.DelayEdge(edge)
-				pools.Add(pool)
-			} else {
-				this.ScheduleWork(it)
-			}
-		}
-	}
-
-	// Call RetrieveReadyEdges only once at the end so higher priority
-	// edges are retrieved first, not the ones that happen to be first
-	// in the want_ map.
-	for it, _ := range pools {
-		it.RetrieveReadyEdges(this.ready_)
-	}
-}
-
-// / Update plan with knowledge that the given node is up to date.
-// / If the node is a dyndep binding on any of its dependents, this
-// / loads dynamic dependencies from the node's path.
-// / Returns 'false' if loading dyndep info fails and 'true' otherwise.
-func (this *Plan) NodeFinished(node *Node, err *string) bool {
-	// If this node provides dyndep info, load it now.
-	if node.dyndep_pending() {
-		if this.builder_ != nil {
-			panic("dyndep requires Plan to have a Builder")
-		}
-		// Load the now-clean dyndep file.  This will also update the
-		// build plan and schedule any new work that is ready.
-		return this.builder_.LoadDyndeps(node, err)
-	}
-
-	// See if we we want any edges from this node.
-	for _, oe := range node.out_edges() {
-		want_e, ok := this.want_[oe]
-		if !ok {
-			continue
-		}
-
-		// See if the edge is now ready.
-		if !this.EdgeMaybeReady(want_e, err) {
-			return false
-		}
-	}
-	return true
-}
-
-func (this *Plan) EdgeWanted(edge *Edge) {
-	this.wanted_edges_++
-	if !edge.is_phony() {
-		this.command_edges_++
-		if this.builder_ != nil {
-			this.builder_.status_.EdgeAddedToPlan(edge)
-		}
-	}
-}
-func (this *Plan) EdgeMaybeReady(want_e Want, err *string) bool {
-	edge := want_e
-	if edge.AllInputsReady() {
-		if want_e.second != kWantNothing {
-			this.ScheduleWork(want_e)
-		} else {
-			// We do not need to build this edge, but we might need to build one of
-			// its dependents.
-			if !this.EdgeFinished(edge, kEdgeSucceeded, err) {
-				return false
-			}
-		}
-	}
-	return true
-}
-
-// / Submits a ready edge as a candidate for execution.
-// / The edge may be delayed from running, for example if it's a member of a
-// / currently-full pool.
-func (p *Plan) ScheduleWork(want_e Want) {}
 
 // / The result of waiting for a command.
 type Result struct {
@@ -641,12 +130,12 @@ func NewBuilder(state *State, config *BuildConfig, build_log *BuildLog,
 	ret := Builder{}
 	ret.state_ = state
 	ret.config_ = config
-	ret.plan_ = &ret
+	ret.plan_ = NewPlan(&ret)
 	ret.status_ = status
 	ret.start_time_millis_ = start_time_millis
 	ret.disk_interface_ = disk_interface
 	if g_explaining {
-		ret.explanations_ = NewExplanations()
+		ret.explanations_ = nil //Explanations{}
 	} else {
 		ret.explanations_ = nil
 	}
@@ -686,7 +175,7 @@ func (this *Builder) Cleanup() {
 				if new_mtime == -1 { // Log and ignore Stat() errors.
 					this.status_.Error("%s", err)
 				}
-				if !depfile.empty() || o.mtime() != new_mtime {
+				if depfile != "" || o.mtime() != new_mtime {
 					this.disk_interface_.RemoveFile(o.path())
 				}
 			}
@@ -734,7 +223,7 @@ func (this *Builder) AddTarget2(target *Node, err *string) bool {
 	for _, n := range validation_nodes {
 		validation_in_edge := n.in_edge()
 		if validation_in_edge != nil {
-			if !validation_in_edge.outputs_ready() && !this.plan_.AddTarget(*n, err) {
+			if !validation_in_edge.outputs_ready() && !this.plan_.AddTarget(n, err) {
 				return false
 			}
 		}
@@ -782,7 +271,7 @@ func (this *Builder) Build(err *string) bool {
 			capacity := this.command_runner_.CanRunMore()
 			for capacity > 0 {
 				edge := this.plan_.FindWork()
-				if !edge {
+				if edge == nil {
 					break
 				}
 
@@ -890,7 +379,7 @@ func (this *Builder) StartEdge(edge *Edge, err *string) bool {
 	// filesystem mtime to record later
 	// XXX: this will block; do we care?
 	for _, o := range edge.outputs_ {
-		ok := this.disk_interface_.MakeDirs(o.path())
+		ok := this.disk_interface_.MakeDirs(o.path(), err)
 		if !ok {
 			return false
 		}
@@ -908,7 +397,7 @@ func (this *Builder) StartEdge(edge *Edge, err *string) bool {
 	// Create depfile directory if needed.
 	// XXX: this may also block; do we care?
 	depfile := edge.GetUnescapedDepfile()
-	ok := this.disk_interface_.MakeDirs(depfile)
+	ok := this.disk_interface_.MakeDirs(depfile, err)
 	if depfile != "" && !ok {
 		return false
 	}
@@ -1001,7 +490,7 @@ func (this *Builder) FinishCommand(result *Result, err *string) bool {
 					// The rule command did not change the output.  Propagate the clean
 					// state through the build graph.
 					// Note that this also applies to nonexistent outputs (mtime == 0).
-					if !this.plan_.CleanNode(&this.scan_, *o, err) {
+					if !this.plan_.CleanNode(this.scan_, o, err) {
 						return false
 					}
 					node_cleaned = true
@@ -1026,7 +515,7 @@ func (this *Builder) FinishCommand(result *Result, err *string) bool {
 	if this.scan_.build_log() != nil {
 		if !this.scan_.build_log().RecordCommand(edge, int(start_time_millis),
 			int(end_time_millis), record_mtime) {
-			*err = string("Error writing to build log: ") + strerror(errno)
+			*err = string("Error writing to build log: ") + *err
 			return false
 		}
 	}
@@ -1067,7 +556,7 @@ func (this *Builder) ExtractDeps(result *Result, deps_type string, deps_prefix s
 			// all backslashes (as some of the slashes will certainly be backslashes
 			// anyway). This could be fixed if necessary with some additional
 			// complexity in IncludesNormalize::Relativize.
-			deps_nodes = append(deps_nodes, this.state_.GetNode(i, ^0))
+			deps_nodes = append(deps_nodes, this.state_.GetNode(i, math.MaxUint64))
 		}
 	} else if deps_type == "gcc" {
 		depfile := result.edge.GetUnescapedDepfile()
@@ -1090,7 +579,7 @@ func (this *Builder) ExtractDeps(result *Result, deps_type string, deps_prefix s
 		}
 
 		deps := NewDepfileParser(this.config_.depfile_parser_options)
-		if !deps.Parse(&content, err) {
+		if !deps.Parse(content, err) {
 			return false
 		}
 
@@ -1104,7 +593,7 @@ func (this *Builder) ExtractDeps(result *Result, deps_type string, deps_prefix s
 
 		if !g_keep_depfile {
 			if this.disk_interface_.RemoveFile(depfile) < 0 {
-				*err = string("deleting depfile: ") + strerror(errno) + string("\n")
+				*err = string("deleting depfile: ") + *err + string("\n")
 				return false
 			}
 		}
@@ -1124,7 +613,7 @@ func (this *Builder) LoadDyndeps(node *Node, err *string) bool {
 	}
 
 	// Update the build plan to account for dyndep modifications to the graph.
-	if !this.plan_.DyndepsLoaded(&this.scan_, node, ddf, err) {
+	if !this.plan_.DyndepsLoaded(this.scan_, node, ddf, err) {
 		return false
 	}
 

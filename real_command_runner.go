@@ -13,7 +13,7 @@ func NewRealCommandRunner(config *BuildConfig) *RealCommandRunner {
 	return &ret
 }
 func (this *RealCommandRunner) CanRunMore() int64 {
-	subproc_number := len(this.subprocs_.running_) + this.subprocs_.finished_.Len()
+	subproc_number := len(this.subprocs_.running_) + len(this.subprocs_.finished_)
 
 	capacity := float64(this.config_.parallelism - subproc_number)
 

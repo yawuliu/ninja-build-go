@@ -10,9 +10,13 @@ type DyndepParser struct {
 	env_         BindingEnv
 }
 
+func (this *DyndepParser) NewParser(state *State, file_reader FileReader) {
+	this.state_ = state
+	this.file_reader_ = file_reader
+}
 func NewDyndepParser(state *State, file_reader FileReader, dyndep_file DyndepFile) *DyndepParser {
 	ret := DyndepParser{}
-	ret.Parser = *NewParser(state, file_reader)
+	ret.NewParser(state, file_reader)
 	ret.dyndep_file_ = dyndep_file
 	return &ret
 }

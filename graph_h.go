@@ -211,7 +211,7 @@ func (this *ImplicitDepLoader) LoadDepFile(edge *Edge, path string, err *string)
 		depfile = NewDepfileParser(NewDepfileParserOptions())
 	}
 	depfile_err := ""
-	if !depfile.Parse(&content, &depfile_err) {
+	if !depfile.Parse(content, &depfile_err) {
 		*err = path + ": " + depfile_err
 		return false
 	}
@@ -223,12 +223,12 @@ func (this *ImplicitDepLoader) LoadDepFile(edge *Edge, path string, err *string)
 
 	unused := uint64(0)
 	primary_out := depfile.outs_[0]
-	CanonicalizePath(&primary_out, &unused)
+	CanonicalizePath(primary_out, &unused)
 
 	// Check that this depfile matches the edge's output, if not return false to
 	// mark the edge as dirty.
 	opath := first_output.path()
-	if opath != primary_out {
+	if opath != *primary_out {
 		this.explanations_.Record(first_output,
 			"expected depfile '%s' to mention '%s', got '%s'",
 			path, first_output.path(),
@@ -239,8 +239,8 @@ func (this *ImplicitDepLoader) LoadDepFile(edge *Edge, path string, err *string)
 	// Ensure that all mentioned outputs are outputs of the edge.
 	for _, o := range depfile.outs_ {
 		for _, node := range edge.outputs_ {
-			if !strings.Contains(node.path(), o) {
-				*err = path + ": depfile mentions '" + o + "' as an output, but no such output was declared"
+			if !strings.Contains(node.path(), *o) {
+				*err = path + ": depfile mentions '" + *o + "' as an output, but no such output was declared"
 				return false
 			}
 		}

@@ -48,7 +48,7 @@ func real_main() error {
 	if options.tool != nil && options.tool.when == RUN_AFTER_FLAGS {
 		// None of the RUN_AFTER_FLAGS actually use a NinjaMain, but it's needed
 		// by other tools.
-		ninja := NewNinjaMain(ninja_command, &config)
+		// ninja := NewNinjaMain(ninja_command, &config)
 		os.Exit(options.tool.func1(&options, os.Args))
 	}
 

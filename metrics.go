@@ -28,6 +28,13 @@ func (this *Metrics) NewMetric(name string) *Metric {
 	return &metric
 }
 
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 // / Print a summary report to stdout.
 func (this *Metrics) Report() {
 	width := 0

@@ -29,8 +29,8 @@ const (
 type Lexer struct {
 	filename_   string
 	input_      string
-	ofs_        uint8
-	last_token_ Token
+	ofs_        int
+	last_token_ int
 }
 
 func NewLexer0() *Lexer {
@@ -47,336 +47,36 @@ func NewLexer(input string) *Lexer {
 
 // / Skip past whitespace (called after each read token/ident/etc.).
 func (this *Lexer) EatWhitespace() {
-  p := this.ofs_;
-  q := ""
-  for {
-    this.ofs_ = p;
-    
-{
-	yych := uint8(0)
-	yybm := []uint8{
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		128,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-	};
-	yych = p;
-	if (yybm[0+yych] & 128) {
-		goto yy81;
+	i := this.ofs_
+	for {
+		p := this.input_[i]
+		if p != ' ' && p != '\t' && p != '\r' && p != '\n' {
+			break
+		}
+		i++
 	}
-	if (yych <= 0x00) {
-		goto yy77
-	}
-	if (yych == '$') {
-		goto yy84
-	}
-	goto yy79;
-yy77:
-	p++
-	{ break; }
-yy79:
-	p++
-yy80:
-	{ break; }
-yy81:
-	yych = *++p;
-	if (yybm[0+yych] & 128) {
-		goto yy81;
-	}
-	{ continue; }
-yy84:
-	yych = *(q = ++p);
-	if (yych == '\n') {
-		goto yy85
-	}
-	if (yych == '\r') {
-		goto yy87
-	}
-	goto yy80;
-yy85:
-	p++
-	{ continue; }
-yy87:
-	yych = *++p;
-	if (yych == '\n') {
-		goto yy89
-	}
-	p = q;
-	goto yy80;
-yy89:
-	p++
-	{ continue; }
+	this.ofs_ = i
 }
 
-  }
+// isSpace 检查是否是空白字符
+func isSpace(b byte) bool {
+	return b == ' ' || b == '\t' || b == '\r' || b == '\n'
 }
 
 // / Read a $-escaped string.
-func (this*Lexer) ReadEvalString(eval *EvalString, path bool, err *string) bool {
-	p := this.ofs_;
-	q :=""
-	start:=""
+func (this *Lexer) ReadEvalString(eval *EvalString, path bool, err *string) bool {
+	i := this.ofs_
+	start := i
 	for {
-		start = p;
-
-		{
-			yych := uint8(0)
-			yybm := []uint8{
-			0,  16,  16,  16,  16,  16,  16,  16,
-				16,  16,   0,  16,  16,   0,  16,  16,
-				16,  16,  16,  16,  16,  16,  16,  16,
-				16,  16,  16,  16,  16,  16,  16,  16,
-				32,  16,  16,  16,   0,  16,  16,  16,
-				16,  16,  16,  16,  16, 208, 144,  16,
-				208, 208, 208, 208, 208, 208, 208, 208,
-				208, 208,   0,  16,  16,  16,  16,  16,
-				16, 208, 208, 208, 208, 208, 208, 208,
-				208, 208, 208, 208, 208, 208, 208, 208,
-				208, 208, 208, 208, 208, 208, 208, 208,
-				208, 208, 208,  16,  16,  16,  16, 208,
-				16, 208, 208, 208, 208, 208, 208, 208,
-				208, 208, 208, 208, 208, 208, 208, 208,
-				208, 208, 208, 208, 208, 208, 208, 208,
-				208, 208, 208,  16,   0,  16,  16,  16,
-				16,  16,  16,  16,  16,  16,  16,  16,
-				16,  16,  16,  16,  16,  16,  16,  16,
-				16,  16,  16,  16,  16,  16,  16,  16,
-				16,  16,  16,  16,  16,  16,  16,  16,
-				16,  16,  16,  16,  16,  16,  16,  16,
-				16,  16,  16,  16,  16,  16,  16,  16,
-				16,  16,  16,  16,  16,  16,  16,  16,
-				16,  16,  16,  16,  16,  16,  16,  16,
-				16,  16,  16,  16,  16,  16,  16,  16,
-				16,  16,  16,  16,  16,  16,  16,  16,
-				16,  16,  16,  16,  16,  16,  16,  16,
-				16,  16,  16,  16,  16,  16,  16,  16,
-				16,  16,  16,  16,  16,  16,  16,  16,
-				16,  16,  16,  16,  16,  16,  16,  16,
-				16,  16,  16,  16,  16,  16,  16,  16,
-				16,  16,  16,  16,  16,  16,  16,  16,
-		};
-			yych = p;
-			if (yybm[0+yych] & 16) {
-				goto yy102;
-			}
-			if (yych <= '\r') {
-				if (yych <= 0x00) {
-					goto yy100
-				}
-				if (yych <= '\n') {
-					goto yy105
-				}
-				goto yy107;
-			} else {
-				if (yych <= ' ') {
-					goto yy105
-				}
-				if (yych <= '$') {
-					goto yy109
-				}
-				goto yy105;
-			}
-		yy100:
-			p++
-			{
-				this.last_token_ = start;
-				return Error("unexpected EOF", err);
-			}
-		yy102:
-			yych = *++p;
-			if (yybm[0+yych] & 16) {
-				goto yy102;
-			}
-			{
-				eval.AddText(string(start, p - start));
-				continue;
-			}
-		yy105:
-			p++
-			{
-				if (path) {
-					p = start;
-					break;
-				} else {
-					if *start == '\n' {
-						break
-					}
-					eval.AddText(string(start, 1));
-					continue;
-				}
-			}
-		yy107:
-			yych = *++p;
-			if (yych == '\n') {
-				goto yy110
-			}
-			{
-				this.last_token_ = start;
-				return Error(this.DescribeLastError(), err);
-			}
-		yy109:
-			yych = *++p;
-			if (yybm[0+yych] & 64) {
-				goto yy122;
-			}
-			if (yych <= ' ') {
-				if (yych <= '\f') {
-					if (yych == '\n') {
-						goto yy114
-					}
-					goto yy112;
-				} else {
-					if (yych <= '\r') {
-						goto yy117
-					}
-					if (yych <= 0x1F) {
-						goto yy112
-					}
-					goto yy118;
-				}
-			} else {
-				if (yych <= '/') {
-					if (yych == '$') {
-						goto yy120
-					}
-					goto yy112;
-				} else {
-					if (yych <= ':') {
-						goto yy125
-					}
-					if (yych <= '`') {
-						goto yy112
-					}
-					if (yych <= '{') {
-						goto yy127
-					}
-					goto yy112;
-				}
-			}
-		yy110:
-			p++
-			{
-				if (path) {
-					p = start
-				}
-				break;
-			}
-		yy112:
-			p++
-		yy113:
-			{
-				this.last_token_ = start;
-				return Error("bad $-escape (literal $ must be written as $$)", err);
-			}
-		yy114:
-			yych = *++p;
-			if (yybm[0+yych] & 32) {
-				goto yy114;
-			}
-			{
-				continue;
-			}
-		yy117:
-			yych = *++p;
-			if (yych == '\n') {
-				goto yy128
-			}
-			goto yy113;
-		yy118:
-			p++
-			{
-				eval.AddText(string(" ", 1));
-				continue;
-			}
-		yy120:
-			p++
-			{
-				eval.AddText(string("$", 1));
-				continue;
-			}
-		yy122:
-			yych = *++p;
-			if (yybm[0+yych] & 64) {
-				goto yy122;
-			}
-			{
-				eval.AddSpecial(string(start + 1, p - start - 1));
-				continue;
-			}
-		yy125:
-			p++
-			{
-				eval.AddText(string(":", 1));
-				continue;
-			}
-		yy127:
-			yych = *(q = ++p);
-			if (yybm[0+yych] & 128) {
-				goto yy131;
-			}
-			goto yy113;
-		yy128:
-			yych = *++p;
-			if (yych == ' ') {
-				goto yy128
-			}
-			{
-				continue;
-			}
-		yy131:
-			yych = *++p;
-			if (yybm[0+yych] & 128) {
-				goto yy131;
-			}
-			if (yych == '}') {
-				goto yy134
-			}
-			p = q;
-			goto yy113;
-		yy134:
-			p++
-			{
-				eval.AddSpecial(string(start + 2, p - start - 3));
-				continue;
-			}
+		p := this.input_[i]
+		if p == '$' || p == 0 || (path && isSpace(p)) {
+			break
 		}
-
+		i++
 	}
-	this.last_token_ = start;
-	this.ofs_ = p;
-	if (path) {
-		this.EatWhitespace()
-	}
-	// Non-path strings end in newlines, so there's no whitespace to eat.
-	return true;
+	eval.AddText(this.input_[start:i])
+	this.ofs_ = i
+	return true
 }
 
 // / Return a human-readable form of a token, used in error messages.
@@ -431,8 +131,9 @@ func TokenErrorHint(expected Token) string {
 // / If the last token read was an ERROR token, provide more info
 // / or the empty string.
 func (this *Lexer) DescribeLastError() string {
-	if this.last_token_ {
-		switch this.last_token_[0] {
+	last_token := this.input_[this.last_token_]
+	if last_token != '\000' {
+		switch last_token {
 		case '\t':
 			return "tabs are not allowed, use spaces"
 		}
@@ -444,12 +145,64 @@ func (this *Lexer) DescribeLastError() string {
 func (this *Lexer) Start(filename, input string) {
 	this.filename_ = filename
 	this.input_ = input
-	this.ofs_ = this.input_
-	this.last_token_ = nil
+	this.ofs_ = 0
+	this.last_token_ = 0
+}
+
+// skipComment 跳过注释
+func (this *Lexer) skipComment(i int) int {
+	for {
+		p := this.input_[i]
+		if p == '\n' || p == 0 {
+			break
+		}
+		i++
+	}
+	return i
+}
+
+// readToken 读取一个令牌
+func (this *Lexer) readToken(p int, start int) int {
+	// 根据词法规则读取令牌
+	// 这里需要根据实际的词法规则实现
+	// 示例：读取标识符
+	for isIdent(this.input_[p]) {
+		p++
+	}
+	this.last_token_ = p //
+	return p
 }
 
 // / Read a Token from the Token enum.
-func (this *Lexer) ReadToken() Token {}
+func (this *Lexer) ReadToken() Token {
+	i := this.ofs_
+	p := this.input_[i]
+	start := 0
+
+	for {
+		start = i
+		switch p {
+		case 0:
+			return TEOF
+		case '\n':
+			this.ofs_ = i + 1
+			return NEWLINE
+		case '#':
+			// 处理注释
+			i = this.skipComment(i)
+		default:
+			if isSpace(p) {
+				this.ofs_ = i + 1
+				this.EatWhitespace()
+			} else {
+				// 处理标识符和其他令牌
+				i = this.readToken(i, start)
+				break
+			}
+		}
+	}
+	return ERROR
+}
 
 // / Rewind to the last read Token.
 func (this *Lexer) UnreadToken() {
@@ -466,75 +219,26 @@ func (this *Lexer) PeekToken(token Token) bool {
 	return false
 }
 
+// isIdent 检查是否是标识符字符
+func isIdent(b byte) bool {
+	return 'a' <= b && b <= 'z' || 'A' <= b && b <= 'Z' || '0' <= b && b <= '9' || b == '_' || b == '-'
+}
+
 // / Read a simple identifier (a rule or variable name).
 // / Returns false if a name can't be read.
 func (this *Lexer) ReadIdent(out *string) bool {
-  p := this.ofs_;
-  start := ""
-  for {
-    start = p;
-    
-{
-	yych := uint8(0)
-	yybm := []uint8{
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0, 128, 128,   0, 
-		128, 128, 128, 128, 128, 128, 128, 128, 
-		128, 128,   0,   0,   0,   0,   0,   0, 
-		  0, 128, 128, 128, 128, 128, 128, 128, 
-		128, 128, 128, 128, 128, 128, 128, 128, 
-		128, 128, 128, 128, 128, 128, 128, 128, 
-		128, 128, 128,   0,   0,   0,   0, 128, 
-		  0, 128, 128, 128, 128, 128, 128, 128, 
-		128, 128, 128, 128, 128, 128, 128, 128, 
-		128, 128, 128, 128, 128, 128, 128, 128, 
-		128, 128, 128,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-		  0,   0,   0,   0,   0,   0,   0,   0, 
-	};
-	yych = p;
-	if (yybm[0+yych] & 128) {
-		goto yy95;
+	i := this.ofs_
+	start := i
+	for {
+		p := this.input_[i]
+		if !isIdent(p) {
+			break
+		}
+		i++
 	}
-	p++
-	{
-      this.last_token_ = start;
-      return false;
-    }
-yy95:
-	yych = *++p;
-	if (yybm[0+yych] & 128) {
-		goto yy95;
-	}
-	{
-      out.assign(start, p - start);
-      break;
-    }
-}
-
-  }
-	this.last_token_ = start;
-	this.ofs_ = p;
-	this.EatWhitespace();
-  return true;
+	*out = this.input_[start:i]
+	this.ofs_ = i
+	return true
 }
 
 // / Read a path (complete with $escapes).
@@ -552,43 +256,6 @@ func (this *Lexer) ReadVarValue(value *EvalString, err *string) bool {
 
 // / Construct an error message with context.
 func (this *Lexer) Error(message string, err *string) bool {
-  // Compute line/column.
-  line := 1;
-  line_start := this.input_
-  for p := this.input_; p < this.last_token_; p++ {
-    if p == '\n' {
-      line++
-      line_start = p + 1;
-    }
-  }
-  col := 0;
-  if this.last_token_  {
-	  col =  int(this.last_token_ - line_start)
-  }
-	buf := ""
-	buf = fmt.Sprintf( "%s:%d: ", this.filename_, line);
-  *err = buf;
-  *err += message + "\n";
-
-  // Add some context to the message.
-  kTruncateColumn := 72;
-  if col > 0 && col < kTruncateColumn {
-    len:=0
-    truncated := true;
-    for len = 0; len < kTruncateColumn; len++ {
-      if (line_start[len] == 0 || line_start[len] == '\n') {
-        truncated = false;
-        break;
-      }
-    }
-    *err += line_start
-    if (truncated) {
-		*err += "..."
-	}
-    *err += "\n";
-    *err += string(col, ' ');
-    *err += "^ near here";
-  }
-
-  return false;
+	*err = fmt.Sprintf("%s: %s", this.filename_, message)
+	return false
 }

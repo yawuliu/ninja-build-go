@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 	"unicode"
 	"unsafe"
 )
@@ -56,20 +57,23 @@ func NewRealDiskInterface() *RealDiskInterface {
 }
 func (this *RealDiskInterface) ReleaseRealDiskInterface() {}
 
-func TimeStampFromFileTime(filetime syscall.Filetime) TimeStamp {
-	// FILETIME 是自 1601 年以来的 100 纳秒间隔
-	// Unix 时间戳是自 1970 年以来的秒数
-	// 1601 年到 1970 年的秒数差
-	const windowsToUnixEpochDelta = int64((1600*365+89)*24*60*60) * 1000000000
+// TimeStampFromFileTime 将 FILETIME 结构转换为 Unix 时间戳
+func TimeStampFromFileTime(filetime time.Time) TimeStamp {
+	// FILETIME 是自 1601 年 1 月 1 日以来的 100 纳秒间隔
+	// Unix 时间戳是自 1970 年 1 月 1 日以来的秒数
+	// 将 FILETIME 转换为 Unix 时间戳，首先需要将纳秒转换为秒，并调整纪元差异
 
-	// FILETIME 值是 100 纳秒间隔，转换为纳秒
-	nanoseconds := (int64(filetime.HighDateTime) << 32) + int64(filetime.LowDateTime)
+	// 1601 年到 1970 年之间的秒数差
+	const epochDifference = int64((400 * 365 * 24 * 60 * 60) + (97 * 24 * 60 * 60)) // 400 年加上 97 个闰年
+	const nanosecondsPerSecond = int64(1e9)
 
-	// 将纳秒转换为 Unix 时间戳
-	unixNanoseconds := nanoseconds - windowsToUnixEpochDelta
+	// FILETIME 表示的纳秒数
+	filetimeNanoseconds := uint64(filetime.UnixNano())
 
-	// 创建 time.Time 结构
-	return TimeStamp(unixNanoseconds)
+	// 转换为 Unix 时间戳
+	timestamp := uint64((filetimeNanoseconds - uint64(epochDifference)*uint64(nanosecondsPerSecond)) / uint64(nanosecondsPerSecond))
+
+	return TimeStamp(timestamp)
 }
 
 func StatSingleFile(path string, err *string) TimeStamp {
@@ -81,7 +85,7 @@ func StatSingleFile(path string, err *string) TimeStamp {
 		*err = fmt.Errorf("GetFileAttributesEx(%s): %v", path, err1).Error()
 		return -1
 	}
-	return TimeStampFromFileTime(fileInfo.Sys().(*syscall.Win32FileAttributeData).LastWriteTime)
+	return TimeStampFromFileTime(fileInfo.ModTime())
 }
 
 // StatAllFilesInDir 遍历目录中的所有文件，并填充时间戳映射
@@ -105,7 +109,7 @@ func StatAllFilesInDir(dir string, stamps map[string]TimeStamp, err1 *string) bo
 		}
 
 		filePath := filepath.Join(dir, file.Name())
-		info, err := os.Stat(filePath)
+		fileInfo, err := os.Stat(filePath)
 		if err != nil {
 			*err1 = fmt.Errorf("Stat(%s): %w", filePath, err).Error()
 			return false
@@ -115,7 +119,7 @@ func StatAllFilesInDir(dir string, stamps map[string]TimeStamp, err1 *string) bo
 		lowerName := strings.ToLower(file.Name())
 
 		// 将文件的最后写入时间添加到映射中
-		stamps[lowerName] = TimeStampFromFileTime(info.Sys().(*syscall.Win32FileAttributeData).LastWriteTime)
+		stamps[lowerName] = TimeStampFromFileTime(fileInfo.ModTime())
 	}
 
 	return true

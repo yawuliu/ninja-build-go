@@ -1,0 +1,125 @@
+package ninja_go
+
+//func Usage() {
+//  fmt.Printf(
+//"usage: ninja -t msvc [options] -- cl.exe /showIncludes /otherArgs\n"+
+//"options:\n"+
+//"  -e ENVFILE load environment block from ENVFILE as environment\n"+
+//"  -o FILE    write output dependency information to FILE.d\n"+
+//"  -p STRING  localized prefix of msvc's /showIncludes output\n",
+//         );
+//}
+//
+//func PushPathIntoEnvironment(env_block string) {
+//  as_str := env_block
+//  while (as_str[0]) {
+//    if (_strnicmp(as_str, "path=", 5) == 0) {
+//      _putenv(as_str);
+//      return;
+//    } else {
+//      as_str = &as_str[strlen(as_str) + 1];
+//    }
+//  }
+//}
+
+//func WriteDepFileOrDie(object_path string, parse *CLParser) {
+//  depfile_path := string(object_path) + ".d";
+//  depfile := os.Open(depfile_path)
+//  if (!depfile) {
+//    unlink(object_path);
+//    log.Fatalf("opening %s: %s", depfile_path,
+//          GetLastErrorString());
+//  }
+//  if (fprintf(depfile, "%s: ", object_path) < 0) {
+//    unlink(object_path);
+//    fclose(depfile);
+//    unlink(depfile_path);
+//    log.Fatalf("writing %s", depfile_path)
+//  }
+//  headers := parse.includes_;
+//  for (set<string>::const_iterator i = headers.begin();
+//       i != headers.end(); ++i) {
+//    if (fprintf(depfile, "%s\n", EscapeForDepfile(*i)) < 0) {
+//      unlink(object_path);
+//      fclose(depfile);
+//      unlink(depfile_path);
+//      log.Fatalf("writing %s", depfile_path)
+//    }
+//  }
+//  fclose(depfile);
+//}
+
+func MSVCHelperMain(args []string) int {
+	//output_filename := ""
+	//envfile:= ""
+	//
+	//kLongOptions := []option{
+	//  { "help", no_argument, nil, 'h' },
+	//  { "", 0, nil, 0 },
+	//};
+	//opt := 0
+	// deps_prefix := ""
+	//while ((opt = getopt_long(argc, argv, "e:o:p:h", kLongOptions, NULL)) != -1) {
+	//  switch (opt) {
+	//    case 'e':
+	//      envfile = optarg;
+	//      break;
+	//    case 'o':
+	//      output_filename = optarg;
+	//      break;
+	//    case 'p':
+	//      deps_prefix = optarg;
+	//      break;
+	//    case 'h':
+	//    default:
+	//      Usage();
+	//      return 0;
+	//  }
+	//}
+	//
+	// env := ""
+	//if (envfile) {
+	//   err := ""
+	//  if (ReadFile(envfile, &env, &err) != 0) {
+	//    log.Fatalf("couldn't open %s: %s", envfile, err)
+	//  }
+	//  PushPathIntoEnvironment(env);
+	//}
+	//
+	//command := GetCommandLineA();
+	//command = strstr(command, " -- ");
+	//if (!command) {
+	//  log.Fatalln("expected command line to end with \" -- command args\"");
+	//}
+	//command += 4;
+	//
+	//var cl CLWrapper
+	//if (!env.empty()) {
+	//  cl.SetEnvBlock((void *)env.data())
+	//}
+	//output := ""
+	//exit_code := cl.Run(command, &output);
+	//
+	//if (output_filename) {
+	//   parser := CLParser{}
+	//   err := ""
+	//  if (!parser.Parse(output, deps_prefix, &output, &err)) {
+	//    log.Fatalf("%s\n", err)
+	//  }
+	//  WriteDepFileOrDie(output_filename, parser);
+	//}
+	//
+	//if (output.empty()) {
+	//  return exit_code
+	//}
+	//
+	//// CLWrapper's output already as \r\n line endings, make sure the C runtime
+	//// doesn't expand this to \r\r\n.
+	//_setmode(_fileno(stdout), _O_BINARY);
+	//// Avoid printf and C strings, since the actual output might contain null
+	//// bytes like UTF-16 does (yuck).
+	//fwrite(&output[0], 1, output.size(), stdout);
+	//
+	//return exit_code;
+	return 0
+}

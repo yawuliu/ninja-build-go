@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-func islatinalpha(c int) bool {
+func islatinalpha(c uint8) bool {
 	// isalpha() is locale-dependent.
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 }
@@ -35,7 +35,7 @@ func StripAnsiEscapeCodes(in string) string {
 		i += 2
 
 		// Skip everything up to and including the next [a-zA-Z].
-		for i < len(in) && !islatinalpha(int(in[i])) {
+		for i < len(in) && !islatinalpha(in[i]) {
 			i++
 		}
 	}

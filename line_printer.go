@@ -126,7 +126,7 @@ func (this *LinePrinter) PrintOnNewLine(to_print string) {
 		this.PrintOrBuffer("\n", 1)
 	}
 	if to_print != "" {
-		this.PrintOrBuffer(to_print, len(to_print))
+		this.PrintOrBuffer(to_print, int64(len(to_print)))
 	}
 	this.have_blank_line_ = to_print == "" || to_print[len(to_print)-1] == '\n'
 }

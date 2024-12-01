@@ -386,7 +386,7 @@ func (this *Plan) RefreshDyndepDependents(scan *DependencyScan, node *Node, err 
 
 		// Check if this dependent node is now dirty.  Also checks for new cycles.
 		validation_nodes := []*Node{}
-		if !scan.RecomputeDirty(n, &validation_nodes, err) {
+		if !scan.RecomputeDirty(n, validation_nodes, err) {
 			return false
 		}
 
@@ -1030,8 +1030,8 @@ func (this *Builder) FinishCommand(result *Result, err *string) bool {
 	}
 
 	if this.scan_.build_log() != nil {
-		if !this.scan_.build_log().RecordCommand(edge, start_time_millis,
-			end_time_millis, record_mtime) {
+		if !this.scan_.build_log().RecordCommand(edge, int(start_time_millis),
+			int(end_time_millis), record_mtime) {
 			*err = string("Error writing to build log: ") + strerror(errno)
 			return false
 		}

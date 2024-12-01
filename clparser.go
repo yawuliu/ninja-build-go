@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"github.com/ahrtr/gocontainer/set"
 	"strings"
 )
@@ -20,7 +21,7 @@ func FilterShowIncludes(line string, deps_prefix string) string {
 	if deps_prefix=="" {
 		prefix = kDepsPrefixEnglish
 	}
-	if end - in > len(prefix) &&  memcmp(in, prefix, len(prefix)) == 0 {
+	if end - in > len(prefix) &&  strings.HasPrefix(in , prefix) {
 		in += len(prefix)
 		for (*in == ' ') {
 			in++
@@ -33,10 +34,18 @@ func FilterShowIncludes(line string, deps_prefix string) string {
 // / Return true if a mentioned include file is a system path.
 // / Filtering these out reduces dependency information considerably.
 func IsSystemInclude(path string) bool {
-	transform(path.begin(), path.end(), path.begin(), ToLowerASCII);
+	path = TransformToLowerASCII(path)
 	// TODO: this is a heuristic, perhaps there's a better way?
 	return strings.Contains(path, "program files")  ||
 		strings.Contains(path, "microsoft visual studio") ;
+}
+
+func TransformToLowerASCII(s string) string {
+	var buffer bytes.Buffer
+	for _, ch := range s {
+		buffer.WriteRune(ToLowerASCII(ch))
+	}
+	return buffer.String()
 }
 
 // / Parse a line of cl.exe output and return true if it looks like
@@ -44,7 +53,7 @@ func IsSystemInclude(path string) bool {
 // / to be the best we can do.
 // / Exposed for testing.
 func FilterInputFilename(line string) bool {
-	transform(line.begin(), line.end(), line.begin(), ToLowerASCII);
+	line = TransformToLowerASCII(line)
 	// TODO: other extensions, like .asm?
 	return strings.HasSuffix(line, ".c") ||
 		strings.HasSuffix(line, ".cc") ||

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"path/filepath"
 	"strings"
 )
 
@@ -23,28 +25,15 @@ func NewIncludesNormalize(relative_to string) *IncludesNormalize {
 }
 
 // Internal utilities made available for testing, maybe useful otherwise.
-func AbsPath(s string, err *string) string {
-	if IsFullPathName(s) {
-		result := s
-		for i := 0; i < len(result); i++ {
-			if result[i] == '\\' {
-				result[i] = '/'
-			}
-		}
-		return result
-	}
-
-	result := ""
-	if !InternalGetFullPathName(s, result, sizeof(result), err) {
+func AbsPath(s string, err1 *string) string {
+	ret, err := filepath.Abs(s)
+	if err != nil {
+		*err1 = err.Error()
 		return ""
 	}
-	for c := result; *c; c++ {
-		if *c == '\\' {
-			*c = '/'
-		}
-	}
-	return result
+	return ret
 }
+
 func ToLowerASCII(c uint8) uint8 {
 	if c >= 'A' && c <= 'Z' {
 		return (c + ('a' - 'A'))
@@ -98,6 +87,10 @@ func Relativize(path string, start_list []string, err1 *string) string {
 	return strings.Join(relList, "/")
 }
 
+func IsPathSeparator(c uint8) bool {
+	return c == '/' || c == '\\'
+}
+
 // Return true if paths a and b are on the same windows drive.
 // Return false if this function cannot check
 // whether or not on the same windows drive.
@@ -121,38 +114,48 @@ func SameDriveFast(a, b string) bool {
 	return IsPathSeparator(a[2]) && IsPathSeparator(b[2])
 }
 
+func InternalGetFullPathName(fileName string) (string, error) {
+	// 使用 filepath.Abs 获取绝对路径
+	absPath, err := filepath.Abs(fileName)
+	if err != nil {
+		return "", fmt.Errorf("GetFullPathName(%q): %v", fileName, err)
+	}
+	return absPath, nil
+}
+
 // Return true if paths a and b are on the same Windows drive.
 func SameDrive(a, b string, err *string) bool {
 	if SameDriveFast(a, b) {
 		return true
 	}
 
-	a_absolute := ""
-	b_absolute := ""
-	if !InternalGetFullPathName(a, a_absolute, sizeof(a_absolute), err) {
+	aAbsolute, err1 := InternalGetFullPathName(a)
+	if err1 != nil {
+		*err = err1.Error()
 		return false
 	}
-	if !InternalGetFullPathName(b, b_absolute, sizeof(b_absolute), err) {
+	bAbsolute, err1 := InternalGetFullPathName(b)
+	if err1 != nil {
+		*err = err1.Error()
 		return false
 	}
-	a_drive := ""
-	b_drive := ""
-	_splitpath(a_absolute, a_drive, NULL, NULL, NULL)
-	_splitpath(b_absolute, b_drive, NULL, NULL, NULL)
-	return _stricmp(a_drive, b_drive) == 0
+
+	aDrive := filepath.VolumeName(aAbsolute)
+	bDrive := filepath.VolumeName(bAbsolute)
+	return strings.ToUpper(aDrive) == strings.ToUpper(bDrive)
 }
 
 const _MAX_PATH = 260 // max. length of full pathname
 
 // / Normalize by fixing slashes style, fixing redundant .. and . and makes the
 // / path |input| relative to |this->relative_to_| and store to |result|.
-func (this *IncludesNormalize) Normalize(input string, result1 *string, err1 *string) bool {
-	if len(input) > _MAX_PATH {
+func (this *IncludesNormalize) Normalize(input *string, result1 *string, err1 *string) bool {
+	if len(*input) > _MAX_PATH {
 		*err1 = "path too long"
 		return false
 	}
 
-	absInput := AbsPath(input, err1)
+	absInput := AbsPath(*input, err1)
 	if *err1 != "" {
 		return false
 	}
@@ -164,8 +167,10 @@ func (this *IncludesNormalize) Normalize(input string, result1 *string, err1 *st
 
 	if !sameDrive {
 		slash_bits := uint64(0)
-		partiallyFixed := CanonicalizePath(&input, &slash_bits)
-		return partiallyFixed
+		copy := *input
+		CanonicalizePath(&copy, &slash_bits)
+		*result1 = copy
+		return true
 	}
 
 	result := Relativize(absInput, this.split_relative_to_, err1)

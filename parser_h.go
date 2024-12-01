@@ -29,7 +29,7 @@ func (this *Parser) Load(filename string, err *string, parent *Lexer) bool {
 		return false
 	}
 
-	return Parse(filename, contents, err)
+	return this.Parse(filename, contents, err)
 }
 
 // / If the next token is not \a expected, produce an error string
@@ -47,5 +47,5 @@ func (this *Parser) ExpectToken(expected Token, err *string) bool {
 
 // / Parse a file, given its contents as a string.
 func (this *Parser) Parse(filename, input string, err *string) bool {
-
+	return false
 }

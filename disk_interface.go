@@ -275,7 +275,8 @@ const (
 )
 
 func (this *RealDiskInterface) ReadFile(path string, contents, err *string) StatusEnum {
-	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+	if _, err1 := os.Stat(path); errors.Is(err1, os.ErrNotExist) {
+		*err = err1.Error()
 		return NotFound
 	}
 	status := Okay

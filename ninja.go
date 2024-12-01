@@ -59,6 +59,8 @@ type Tool struct {
 }
 
 type NinjaMain struct {
+	BuildLogUser
+
 	/// Command line used to run Ninja.
 	ninja_command_ string
 
@@ -69,7 +71,7 @@ type NinjaMain struct {
 	state_ State
 
 	/// Functions for accessing the disk.
-	disk_interface_ DiskInterface // *RealDiskInterface
+	disk_interface_ RealDiskInterface
 
 	/// The build directory, used for storing the build log etc.
 	build_dir_ string
@@ -125,7 +127,7 @@ func (this *NinjaMain) RunBuild(args []string, status Status) int {
 
 	this.disk_interface_.AllowStatCache(g_experimental_statcache)
 
-	builder := NewBuilder(&this.state_, this.config_, &this.build_log_, &this.deps_log_, this.disk_interface_, status, this.start_time_millis_)
+	builder := NewBuilder(&this.state_, this.config_, &this.build_log_, &this.deps_log_, &this.disk_interface_, status, this.start_time_millis_)
 	for i := 0; i < len(targets); i++ {
 		if !builder.AddTarget2(targets[i], &err) {
 			if err != "" {
@@ -254,7 +256,7 @@ func (this *NinjaMain) RebuildManifest(input_file string, err *string, status St
 		return false
 	}
 
-	builder := NewBuilder(&this.state_, this.config_, &this.build_log_, &this.deps_log_, this.disk_interface_, status, this.start_time_millis_)
+	builder := NewBuilder(&this.state_, this.config_, &this.build_log_, &this.deps_log_, &this.disk_interface_, status, this.start_time_millis_)
 	if !builder.AddTarget2(node, err) {
 		return false
 	}
@@ -584,7 +586,7 @@ func (this *NinjaMain) ToolClean(options *Options, args []string) int {
 		return 1
 	}
 
-	cleaner := NewCleaner(&this.state_, this.config_, this.disk_interface_)
+	cleaner := NewCleaner(&this.state_, this.config_, &this.disk_interface_)
 	if len(args) >= 1 {
 		if clean_rules {
 			return cleaner.CleanRules(args)
@@ -597,7 +599,7 @@ func (this *NinjaMain) ToolClean(options *Options, args []string) int {
 }
 
 func (this *NinjaMain) ToolCleanDead(options *Options, args []string) int {
-	cleaner := NewCleaner(&this.state_, this.config_, this.disk_interface_)
+	cleaner := NewCleaner(&this.state_, this.config_, &this.disk_interface_)
 	return cleaner.CleanDead(this.build_log_.entries())
 }
 
@@ -1188,7 +1190,7 @@ func (this *NinjaMain) ToolGraph(options *Options, args []string) int {
 		return 1
 	}
 
-	graph := NewGraphViz(&this.state_, this.disk_interface_)
+	graph := NewGraphViz(&this.state_, &this.disk_interface_)
 	graph.Start()
 	for _, n := range nodes {
 		graph.AddTarget(n)
@@ -1204,7 +1206,7 @@ func (this *NinjaMain) ToolQuery(options *Options, args []string) int {
 		return 1
 	}
 
-	dyndep_loader := NewDyndepLoader(&this.state_, this.disk_interface_, nil)
+	dyndep_loader := NewDyndepLoader(&this.state_, &this.disk_interface_, nil)
 
 	for i := 0; i < len(args); i++ {
 		err := ""
@@ -1381,7 +1383,7 @@ func (this *NinjaMain) ToolRestat(options *Options, args []string) int {
 		err = ""
 	}
 
-	success := this.build_log_.Restat(log_path, this.disk_interface_, args, &err)
+	success := this.build_log_.Restat(log_path, &this.disk_interface_, args, &err)
 	if !success {
 		Error("failed recompaction: %s", err)
 		return EXIT_FAILURE

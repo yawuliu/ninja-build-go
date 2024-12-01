@@ -1,6 +1,8 @@
 package main
 
-import "slices"
+import (
+	"strings"
+)
 
 type VisitMark int8
 
@@ -236,9 +238,11 @@ func (this *ImplicitDepLoader) LoadDepFile(edge *Edge, path string, err *string)
 
 	// Ensure that all mentioned outputs are outputs of the edge.
 	for _, o := range depfile.outs_ {
-		if !slices.Contains(edge.outputs_, o) {
-			*err = path + ": depfile mentions '" + o + "' as an output, but no such output was declared"
-			return false
+		for _, node := range edge.outputs_ {
+			if !strings.Contains(node.path(), o) {
+				*err = path + ": depfile mentions '" + o + "' as an output, but no such output was declared"
+				return false
+			}
 		}
 	}
 

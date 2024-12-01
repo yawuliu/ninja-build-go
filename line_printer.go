@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"syscall"
 )
 
 type LineType int8
@@ -37,82 +38,87 @@ type LinePrinter struct {
 	console_ interface{}
 }
 
-func NewLinePrinter() *LinePrinter                      {
+// IsTty 检查给定的文件描述符是否指向一个终端
+func isatty(fd int) bool {
+	Stat, err := os.Stat(fmt.Sprintf("/proc/self/fd/%d", fd))
+	if err != nil {
+		return false
+	}
+	return Stat.Mode()&syscall.S_IFMT == syscall.S_IFCHR
+}
+
+func NewLinePrinter() *LinePrinter {
 	ret := LinePrinter{}
 	ret.have_blank_line_ = true
 	ret.console_locked_ = false
- term := os.Getenv("TERM");
+	term := os.Getenv("TERM")
 
-	ret.smart_terminal_ = isatty(1) && term && string(term) != "dumb";
-	ret.supports_color_ = ret.smart_terminal_;
+	ret.smart_terminal_ = isatty(1) && term != "" && string(term) != "dumb"
+	ret.supports_color_ = ret.smart_terminal_
 
-  // Try enabling ANSI escape sequence support on Windows 10 terminals.
-  if ret.supports_color_ {
-    DWORD mode;
-    if (GetConsoleMode(console_, &mode)) {
-      if (!SetConsoleMode(console_, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING)) {
-		  ret.supports_color_ = false;
-      }
-    }
-  }
+	// Try enabling ANSI escape sequence support on Windows 10 terminals.
+	//if ret.supports_color_ {
+	//  DWORD mode;
+	//  if (GetConsoleMode(console_, &mode)) {
+	//    if (!SetConsoleMode(console_, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING)) {
+	//	  ret.supports_color_ = false;
+	//    }
+	//  }
+	//}
 
-  if (!ret.supports_color_) {
-    clicolor_force := os.Getenv("CLICOLOR_FORCE");
-	  ret.supports_color_ = clicolor_force!="" && clicolor_force != "0";
-  }
-  return &ret
+	if !ret.supports_color_ {
+		clicolor_force := os.Getenv("CLICOLOR_FORCE")
+		ret.supports_color_ = clicolor_force != "" && clicolor_force != "0"
+	}
+	return &ret
 }
 func (this *LinePrinter) is_smart_terminal() bool       { return this.smart_terminal_ }
 func (this *LinePrinter) set_smart_terminal(smart bool) { this.smart_terminal_ = smart }
 
 func (this *LinePrinter) supports_color() bool { return this.supports_color_ }
 
+// getTerminalWidth 获取终端的宽度
+func getTerminalWidth() (int, error) {
+	return 800, nil
+}
+
+// elideMiddleInPlace 截断字符串以适应给定的宽度
+func elideMiddleInPlace(s string, maxWidth int) string {
+	if len(s) <= maxWidth {
+		return s
+	}
+	half := (maxWidth - 3) / 2 // 保留 "..." 的空间
+	return s[:half] + "..." + s[len(s)-half:]
+}
+
+// printString 打印字符串，如果终端宽度有限，则截断中间部分
+func (this *LinePrinter) PrintString(toPrint string) {
+	width, err := getTerminalWidth()
+	if err == nil && width > 0 {
+		toPrint = elideMiddleInPlace(toPrint, width)
+	}
+	fmt.Print(toPrint)  // \r 用于覆盖上一行
+	fmt.Print("\033[K") // 清除行尾
+}
+
 // / Overprints the current line. If type is ELIDE, elides to_print to fit on
 // / one line.
-func (this *LinePrinter) Print(to_print string, tp LineType) {
- if this.console_locked_ {
-	 this.line_buffer_ = to_print;
-	 this.line_type_ = tp
-    return;
-  }
+func (this *LinePrinter) Print(to_print string, lineType LineType) {
+	if this.console_locked_ {
+		this.line_buffer_ = to_print
+		this.line_type_ = lineType
+		return
+	}
 
-  if (this.smart_terminal_) {
-	  fmt.Printf("\r");  // Print over previous line, if any.
-    // On Windows, calling a C library function writing to stdout also handles
-    // pausing the executable when the "Pause" key or Ctrl-S is pressed.
-  }
+	if this.smart_terminal_ {
+		fmt.Print("\r") // 覆盖上一行
+	}
 
-  if (this.smart_terminal_ && tp == ELIDE) {
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-    GetConsoleScreenBufferInfo(console_, &csbi);
-
-    ElideMiddleInPlace(to_print, static_cast<size_t>(csbi.dwSize.X));
-    if (this.supports_color_) {  // this means ENABLE_VIRTUAL_TERMINAL_PROCESSING
-                            // succeeded
-		fmt.Printf("%s\x1B[K", to_print);  // Clear to end of line.
-		os.Stdout.Sync()
-    } else {
-      // We don't want to have the cursor spamming back and forth, so instead of
-      // printf use WriteConsoleOutput which updates the contents of the buffer,
-      // but doesn't move the cursor position.
-      COORD buf_size = { csbi.dwSize.X, 1 };
-      COORD zero_zero = { 0, 0 };
-      SMALL_RECT target = { csbi.dwCursorPosition.X, csbi.dwCursorPosition.Y,
-                            static_cast<SHORT>(csbi.dwCursorPosition.X +
-                                               csbi.dwSize.X - 1),
-                            csbi.dwCursorPosition.Y };
-      char_data := []CHAR_INFO (csbi.dwSize.X);
-      for i := 0; i < csbi.dwSize.X; i++ {
-        char_data[i].Char.AsciiChar = i < len(to_print) ? to_print[i] : ' ';
-        char_data[i].Attributes = csbi.wAttributes;
-      }
-      WriteConsoleOutput(console_, &char_data[0], buf_size, zero_zero, &target);
-    }
-    this.have_blank_line_ = false;
-  } else {
-    fmt.Printf("%s\n", to_print);
-    os.Stdout.Sync()
-  }
+	if this.smart_terminal_ && lineType == ELIDE {
+		this.PrintString(to_print)
+	} else {
+		fmt.Printf("%s\n", to_print)
+	}
 }
 
 // / Prints a string on a new line, not overprinting previous output.

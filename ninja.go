@@ -69,7 +69,7 @@ type NinjaMain struct {
 	state_ State
 
 	/// Functions for accessing the disk.
-	disk_interface_ FileReader // *RealDiskInterface
+	disk_interface_ DiskInterface // *RealDiskInterface
 
 	/// The build directory, used for storing the build log etc.
 	build_dir_ string
@@ -253,7 +253,7 @@ func (this *NinjaMain) RebuildManifest(input_file string, err *string, status St
 		return false
 	}
 
-	builder := NewBuilder(&this.state_, this.config_, &this.build_log_, &this.deps_log_, &this.disk_interface_, status, this.start_time_millis_)
+	builder := NewBuilder(&this.state_, this.config_, &this.build_log_, &this.deps_log_, this.disk_interface_, status, this.start_time_millis_)
 	if !builder.AddTarget2(node, err) {
 		return false
 	}
@@ -315,7 +315,7 @@ func WarningEnable(name string, options *Options) bool {
 		Warning("deprecated warning 'depfilemulti'")
 		return true
 	} else {
-		suggestion := SpellcheckString(name, "phonycycle=err", "phonycycle=warn", nil)
+		suggestion := SpellcheckString(name, "phonycycle=err", "phonycycle=warn", "\000")
 		if suggestion != "" {
 			Error("unknown warning flag '%s', did you mean '%s'?", name, suggestion)
 		} else {
@@ -1203,7 +1203,7 @@ func (this *NinjaMain) ToolQuery(options *Options, args []string) int {
 		return 1
 	}
 
-	dyndep_loader := NewDyndepLoader(&this.state_, &this.disk_interface_, nil)
+	dyndep_loader := NewDyndepLoader(&this.state_, this.disk_interface_, nil)
 
 	for i := 0; i < len(args); i++ {
 		err := ""

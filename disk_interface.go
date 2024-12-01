@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"unicode"
 )
 
 // DiskInterface ---------------------------------------------------------------
@@ -117,44 +119,59 @@ func StatAllFilesInDir(dir string, stamps map[string]TimeStamp) error {
 	return nil
 }
 
+// toLowerRune 将 rune 转换为小写
+func toLowerRune(r rune) rune {
+	if unicode.IsUpper(r) {
+		return unicode.ToLower(r)
+	}
+	return r
+}
 
+// transformToLower 将字符串中的所有字符转换为小写
+func transformToLower(s string) string {
+	var buffer bytes.Buffer
+	for _, ch := range s {
+		buffer.WriteRune(toLowerRune(ch))
+	}
+	return buffer.String()
+}
 // / stat() a file, returning the mtime, or 0 if missing and -1 on
 // / other errors.
 func (this *RealDiskInterface) Stat(path string, err *string) TimeStamp {
 	METRIC_RECORD("node stat");
-  // MSDN: "Naming Files, Paths, and Namespaces"
-  // http://msdn.microsoft.com/en-us/library/windows/desktop/aa365247(v=vs.85).aspx
-  if path!="" && !AreLongPathsEnabled() && path[0] != '\\' && len(path) > syscall.MAX_PATH {
-	tmp := ""
-	fmt.Sprintf(tmp, "Stat(%s): Filename longer than %d characters", path, syscall.MAX_PATH)
-    *err = tmp
-    return -1;
-  }
-  if !this.use_cache_ {
-	  return StatSingleFile(path, err)
-  }
+	// MSDN: "Naming Files, Paths, and Namespaces"
+	// http://msdn.microsoft.com/en-us/library/windows/desktop/aa365247(v=vs.85).aspx
+	if path!="" && !AreLongPathsEnabled() && path[0] != '\\' && len(path) > syscall.MAX_PATH {
+		tmp := ""
+		fmt.Sprintf(tmp, "Stat(%s): Filename longer than %d characters", path, syscall.MAX_PATH)
+		*err = tmp
+		return -1;
+	}
+	if !this.use_cache_ {
+		return StatSingleFile(path, err)
+	}
 
-  dir := DirName(path)
+	dir := DirName(path)
 	base := ""
-  if  len(dir) >0 {
-	  base =path[len(dir) + 1 :]
-  } else {
-	  base =path[0:]
-  }
+	if  len(dir) >0 {
+		base =path[len(dir) + 1 :]
+	} else {
+		base =path[0:]
+	}
 
-  if (base == "..") {
-    // StatAllFilesInDir does not report any information for base = "..".
-    base = ".";
-    dir = path;
-  }
+	if (base == "..") {
+		// StatAllFilesInDir does not report any information for base = "..".
+		base = ".";
+		dir = path;
+	}
 
-  dir_lowercase := dir
-  transform(dir.begin(), dir.end(), dir_lowercase.begin(), ::tolower);
-  transform(base.begin(), base.end(), base.begin(), ::tolower);
+	dir_lowercase := dir
+	dir = transformToLower(dir)
+	base = transformToLower(base)
 
   ci_second,ok := this.cache_[dir_lowercase]
   if !ok {
-    ci = this.cache_.insert(make_pair(dir_lowercase, DirCache())).first;
+	  this.cache_[dir_lowercase] =  DirCache()
     if !StatAllFilesInDir(dir=="" ? "." : dir, &ci.second, err) {
       this.cache_.erase(ci);
       return -1;

@@ -23,6 +23,7 @@ type GETOPT_LONG_OPTION_T struct {
 type option GETOPT_LONG_OPTION_T
 
 var optind int = 0
-var optarg string = ""
+
+// var optarg string = ""
 var opterr int = 1
 var optopt int = '?'

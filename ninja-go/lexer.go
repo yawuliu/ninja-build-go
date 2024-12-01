@@ -176,11 +176,12 @@ func (this *Lexer) readToken(p int, start int) int {
 // / Read a Token from the Token enum.
 func (this *Lexer) ReadToken() Token {
 	i := this.ofs_
-	p := this.input_[i]
+	//p := this.input_[i]
 	start := 0
 
 	for {
 		start = i
+		p := this.input_[i]
 		switch p {
 		case 0:
 			return TEOF
@@ -194,6 +195,7 @@ func (this *Lexer) ReadToken() Token {
 			if isSpace(p) {
 				this.ofs_ = i + 1
 				this.EatWhitespace()
+				i += 1
 			} else {
 				// 处理标识符和其他令牌
 				i = this.readToken(i, start)

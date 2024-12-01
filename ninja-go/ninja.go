@@ -437,6 +437,7 @@ func ReadFlags(args []string, options *Options, config *BuildConfig) int {
 	//for options.tool==nil && (opt = getopt_long(os.Args, "d:f:j:k:l:nt:vw:C:h", kLongOptions, nil)) != -1 {
 	for _, optV := range opts {
 		opt := optV.Option
+		optarg := optV.Value
 		switch opt {
 		case 'd':
 			if !DebugEnable(optarg) {
@@ -763,6 +764,7 @@ func (this *NinjaMain) ToolMultiInputs(options *Options, args []string) int {
 	}
 	for _, optV := range opts {
 		opt := optV.Option
+		optarg := optV.Value
 		switch opt {
 		case 'd':
 			delimiter = optarg

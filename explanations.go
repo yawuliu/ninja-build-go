@@ -2,6 +2,14 @@ package main
 
 import "fmt"
 
+type Explanations interface {
+	dummy()
+	Record(item interface{}, fmt string, args ...interface{})
+	RecordArgs(item interface{}, fmt1 string, args []interface{})
+	LookupAndAppend(item interface{}, out []string)
+	ptr() Explanations
+}
+
 type OptionalExplanations struct { // explanations_
 	Explanations
 	map_ map[interface{}][]string

@@ -5,6 +5,14 @@ import (
 	"strings"
 )
 
+type DepfileParserOptions struct {
+}
+
+func NewDepfileParserOptions() *DepfileParserOptions {
+	ret := DepfileParserOptions{}
+	return &ret
+}
+
 type DepfileParser struct {
 	outs_    []*string
 	ins_     []*string

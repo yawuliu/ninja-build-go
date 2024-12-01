@@ -10,6 +10,8 @@ import (
 	"strings"
 )
 
+type TimeStamp int64
+
 func islatinalpha(c uint8) bool {
 	// isalpha() is locale-dependent.
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')

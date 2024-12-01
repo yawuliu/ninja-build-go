@@ -162,7 +162,7 @@ func (this *Lexer) skipComment(i int) int {
 }
 
 // readToken 读取一个令牌
-func (this *Lexer) readToken(p int, start int) int {
+func (this *Lexer) readToken(p int, start int) Token {
 	// 根据词法规则读取令牌
 	// 这里需要根据实际的词法规则实现
 	// 示例：读取标识符
@@ -170,7 +170,7 @@ func (this *Lexer) readToken(p int, start int) int {
 		p++
 	}
 	this.last_token_ = p //
-	return p
+	return this.input_[p]
 }
 
 // / Read a Token from the Token enum.
@@ -195,11 +195,11 @@ func (this *Lexer) ReadToken() Token {
 			if isSpace(p) {
 				this.ofs_ = i + 1
 				this.EatWhitespace()
-				i += 1
 			} else {
 				// 处理标识符和其他令牌
-				i = this.readToken(i, start)
-				break
+				token := this.readToken(i, start)
+				this.ofs_ = i // 更新ofs_到当前处理的位置
+				return token
 			}
 		}
 	}

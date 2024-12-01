@@ -1,0 +1,12 @@
+cc = gcc
+cflags = -Wall
+
+rule cc
+  command = $cc $cflags -c $in -o $out
+
+build main.o: cc main.c
+
+rule link
+  command = $cc $cflags $in -o $out
+
+build demo.exe: link main.o

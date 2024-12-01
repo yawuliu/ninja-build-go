@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/ahrtr/gocontainer/set"
 	"github.com/edwingeng/deque"
 	"log"
 )
@@ -370,7 +369,7 @@ func (this *TopoSort) Visit(edge *Edge) {
 func (this *Plan) RefreshDyndepDependents(scan *DependencyScan, node *Node, err *string) bool {
 	// Collect the transitive closure of dependents and mark their edges
 	// as not yet visited by RecomputeDirty.
-	dependents := set.New() //set<Node*>
+	dependents := map[*Node]bool{} //set<Node*>
 	this.UnmarkDependents(node, &dependents)
 
 	// Update the dirty state of all dependents and check if their edges
@@ -415,7 +414,7 @@ func (this *Plan) RefreshDyndepDependents(scan *DependencyScan, node *Node, err 
 	}
 	return true
 }
-func (this *Plan) UnmarkDependents(node *Node, dependents set.Interface) { //map[*Node]bool
+func (this *Plan) UnmarkDependents(node *Node, dependents map[*Node]bool) { //map[*Node]bool
 	for _, oe := range node.out_edges() {
 		edge := oe
 
@@ -427,7 +426,8 @@ func (this *Plan) UnmarkDependents(node *Node, dependents set.Interface) { //map
 		if edge.mark_ != VisitNone {
 			edge.mark_ = VisitNone
 			for _, o := range edge.outputs_ {
-				if dependents.Add(o) {
+				_, ok := dependents[o]
+				if !ok {
 					this.UnmarkDependents(o, dependents)
 				}
 			}
@@ -878,7 +878,7 @@ func (this *Builder) StartEdge(edge *Edge, err *string) bool {
 	}
 
 	start_time_millis := GetTimeMillis() - this.start_time_millis_
-	this.running_edges_[edge] = start_time_millis
+	this.running_edges_[edge] = int(start_time_millis)
 
 	this.status_.BuildEdgeStarted(edge, start_time_millis)
 
@@ -890,7 +890,7 @@ func (this *Builder) StartEdge(edge *Edge, err *string) bool {
 	// filesystem mtime to record later
 	// XXX: this will block; do we care?
 	for _, o := range edge.outputs_ {
-		ok, _ := this.disk_interface_.MakeDirs(o.path())
+		ok := this.disk_interface_.MakeDirs(o.path())
 		if !ok {
 			return false
 		}
@@ -908,7 +908,7 @@ func (this *Builder) StartEdge(edge *Edge, err *string) bool {
 	// Create depfile directory if needed.
 	// XXX: this may also block; do we care?
 	depfile := edge.GetUnescapedDepfile()
-	ok, _ := this.disk_interface_.MakeDirs(depfile)
+	ok := this.disk_interface_.MakeDirs(depfile)
 	if depfile != "" && !ok {
 		return false
 	}
@@ -925,7 +925,7 @@ func (this *Builder) StartEdge(edge *Edge, err *string) bool {
 
 	// start command computing and run it
 	if !this.command_runner_.StartCommand(edge) {
-		err.assign("command '" + edge.EvaluateCommand(false) + "' failed.")
+		*err = "command '" + edge.EvaluateCommand(false) + "' failed."
 		return false
 	}
 
@@ -1040,8 +1040,8 @@ func (this *Builder) FinishCommand(result *Result, err *string) bool {
 			if deps_mtime == -1 {
 				return false
 			}
-			if !this.scan_.deps_log().RecordDeps(o, deps_mtime, deps_nodes) {
-				*err = "Error writing to deps log: " + strerror(errno)
+			if !this.scan_.deps_log().RecordDeps(o, deps_mtime, deps_nodes, err) {
+				*err = "Error writing to deps log: " + *err
 				return false
 			}
 		}
@@ -1067,7 +1067,7 @@ func (this *Builder) ExtractDeps(result *Result, deps_type string, deps_prefix s
 			// all backslashes (as some of the slashes will certainly be backslashes
 			// anyway). This could be fixed if necessary with some additional
 			// complexity in IncludesNormalize::Relativize.
-			deps_nodes = append(deps_nodes, this.state_.GetNode(i, ~0))
+			deps_nodes = append(deps_nodes, this.state_.GetNode(i, ^0))
 		}
 	} else if deps_type == "gcc" {
 		depfile := result.edge.GetUnescapedDepfile()

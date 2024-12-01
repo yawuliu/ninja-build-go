@@ -11,7 +11,7 @@ type NodeStoringImplicitDepLoader struct {
 	dep_nodes_output_ []*Node
 }
 
-func NewNodeStoringImplicitDepLoader(state *State, deps_log *DepsLog, disk_interface DiskInterface,
+func NewNodeStoringImplicitDepLoader(state *State, deps_log *DepsLog, disk_interface *RealDiskInterface,
 	depfile_parser_options *DepfileParserOptions, explanations Explanations, dep_nodes_output []*Node) *NodeStoringImplicitDepLoader {
 	ret := NodeStoringImplicitDepLoader{}
 	ret.ImplicitDepLoader = *NewImplicitDepLoader(state, deps_log, disk_interface, depfile_parser_options, explanations)
@@ -52,7 +52,7 @@ type MissingDependencyScanner struct {
 	delegate_               MissingDependencyScannerDelegate
 	deps_log_               *DepsLog
 	state_                  *State
-	disk_interface_         DiskInterface
+	disk_interface_         *RealDiskInterface
 	seen_                   map[*Node]bool
 	nodes_missing_deps_     map[*Node]bool
 	generated_nodes_        map[*Node]bool
@@ -62,7 +62,7 @@ type MissingDependencyScanner struct {
 	adjacency_map_ AdjacencyMap
 }
 
-func NewMissingDependencyScanner(delegate MissingDependencyScannerDelegate, deps_log *DepsLog, state *State, disk_interface DiskInterface) *MissingDependencyScanner {
+func NewMissingDependencyScanner(delegate MissingDependencyScannerDelegate, deps_log *DepsLog, state *State, disk_interface *RealDiskInterface) *MissingDependencyScanner {
 	ret := MissingDependencyScanner{}
 	ret.delegate_ = delegate
 	ret.deps_log_ = deps_log

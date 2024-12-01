@@ -91,8 +91,9 @@ func NewNinjaMain(ninja_command string, config *BuildConfig) *NinjaMain {
 func (this *NinjaMain) EnsureBuildDirExists() bool {
 	this.build_dir_ = this.state_.bindings_.LookupVariable("builddir")
 	if this.build_dir_ != "" && !this.config_.dry_run {
-		if succ, err := this.disk_interface_.MakeDirs(this.build_dir_ + "/."); !succ {
-			Error("creating build directory %s: %v", this.build_dir_, err)
+		err := ""
+		if succ := this.disk_interface_.MakeDirs(this.build_dir_+"/.", &err); !succ {
+			Error("creating build directory %s: %s", this.build_dir_, err)
 			return false
 		}
 	}

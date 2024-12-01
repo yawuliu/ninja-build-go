@@ -19,7 +19,7 @@ type FileReader interface {
 	Stat(path string, err *string) TimeStamp
 	WriteFile(path string, contents string) bool
 	MakeDir(path string) bool
-	MakeDirs(path string) (bool, error)
+	MakeDirs(path string, err *string) bool
 	ReadFile(path string, contents *string, err *string) StatusEnum
 	RemoveFile(path string) int
 	AllowStatCache(allow bool)
@@ -30,7 +30,7 @@ type DiskInterface interface {
 	Stat(path string, err *string) TimeStamp
 	WriteFile(path string, contents string) bool
 	MakeDir(path string) bool
-	MakeDirs(path string) (bool, error)
+	MakeDirs(path string, err *string) bool
 	ReadFile(path string, contents, err *string) StatusEnum
 	RemoveFile(path string) int
 	AllowStatCache(allow bool)

@@ -16,10 +16,10 @@ import (
 // DiskInterface ---------------------------------------------------------------
 
 // / Create a directory, returning false on failure.
-func (this *RealDiskInterface) MakeDir(path string) (bool, error) {
+func (this *RealDiskInterface) MakeDir(path string) bool {
 	err := os.Mkdir(path, os.ModePerm)
 	succ := err == nil
-	return succ, err
+	return succ
 }
 
 func DirName(path string) string {
@@ -27,24 +27,23 @@ func DirName(path string) string {
 }
 
 // / Create a directory, returning false on failure.
-func (this *RealDiskInterface) MakeDirs(path string) (bool, error) {
+func (this *RealDiskInterface) MakeDirs(path string, err1 *string) bool {
 	dir := DirName(path)
 	if dir == "" {
-		return true, nil // Reached root; assume it's there.
+		return true // Reached root; assume it's there.
 	}
-	err := ""
-	mtime := this.Stat(dir, &err)
+	mtime := this.Stat(dir, err1)
 	if mtime < 0 {
-		Error("%s", err)
-		return false, errors.New(err)
+		Error("%s", err1)
+		return false
 	}
 	if mtime > 0 {
-		return true, nil // Exists already; we're done.
+		return true // Exists already; we're done.
 	}
 	// Directory doesn't exist.  Try creating its parent first.
-	success, er := this.MakeDirs(dir)
+	success := this.MakeDirs(dir, err1)
 	if !success {
-		return false, er
+		return false
 	}
 	return this.MakeDir(dir)
 }

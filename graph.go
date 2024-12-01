@@ -515,7 +515,7 @@ func (this *DependencyScan) RecomputeNodeDirty(node *Node, stack []*Node, valida
 
 	// Visit all inputs; we're dirty if any of the inputs are dirty.
 	var most_recent_input *Node = nil
-	for _, i := range edge.inputs_ {
+	for index, i := range edge.inputs_ {
 		// Visit this input.
 		if !this.RecomputeNodeDirty(i, stack, validation_nodes, err) {
 			return false
@@ -529,7 +529,7 @@ func (this *DependencyScan) RecomputeNodeDirty(node *Node, stack []*Node, valida
 			}
 		}
 
-		if !edge.is_order_only(i - edge.inputs_.begin()) {
+		if !edge.is_order_only(int64(index)) {
 			// If a regular input is dirty (or missing), we're dirty.
 			// Otherwise consider mtime.
 			if i.dirty() {
@@ -581,42 +581,32 @@ func (this *DependencyScan) RecomputeNodeDirty(node *Node, stack []*Node, valida
 func (this *DependencyScan) VerifyDAG(node *Node, stack []*Node, err *string) bool {
 	edge := node.in_edge()
 	if edge == nil {
-		panic("edge ==nil")
+		*err = "assertion failed: edge is NULL"
+		return false
 	}
 
-	// If we have no temporary mark on the edge then we do not yet have a cycle.
+	// 如果边没有临时标记，则尚未发现循环
 	if edge.mark_ != VisitInStack {
 		return true
 	}
 
-	// We have this edge earlier in the call stack.  Find it.
-	start := stack[0]
-	for start != stack.end() && start.in_edge() != edge {
-		start++
-	}
-	if start != stack.end() {
-		panic("start != stack.end()")
+	// 查找调用栈中该边的起始位置
+	for i, n := range stack {
+		if n.in_edge() == edge {
+			// 标记循环的开始为边的结束节点
+			stack[i] = node
+			break
+		}
 	}
 
-	// Make the cycle clear by reporting its start as the node at its end
-	// instead of some other output of the starting edge.  For example,
-	// running 'ninja b' on
-	//   build a b: cat c
-	//   build c: cat a
-	// should report a . c . a instead of b . c . a.
-	*start = node
-
-	// Construct the error message rejecting the cycle.
+	// 构建错误信息，拒绝循环
 	*err = "dependency cycle: "
-	for _, i := range start { //; i != stack.end(); ++i)
-		*err += i.path()
-		*err += " . "
+	for _, n := range stack {
+		*err += n.path_ + " -> "
 	}
-	*err += start.path()
+	*err += stack[len(stack)-1].path_
 
-	if (start+1) == stack.end() && edge.maybe_phonycycle_diagnostic() {
-		// The manifest parser would have filtered out the self-referencing
-		// input if it were not configured to allow the error.
+	if len(stack) == 1 && edge.maybe_phonycycle_diagnostic() {
 		*err += " [-w phonycycle=err]"
 	}
 

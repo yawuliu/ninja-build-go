@@ -202,21 +202,21 @@ func (this *StatusPrinter) BuildFinished() {
 }
 
 func (this *StatusPrinter) Info(msg string, args ...interface{}) {
-	Info(msg, args)
+	Info(msg, args...)
 }
 func (this *StatusPrinter) Warning(msg string, args ...interface{}) {
-	Warning(msg, args)
+	Warning(msg, args...)
 }
 func (this *StatusPrinter) Error(msg string, args ...interface{}) {
-	Error(msg, args)
+	Error(msg, args...)
 }
 
 func FORMAT_TIME_HMMSS(t int64) string {
-	return fmt.Sprintf("%"+PRId64+":%02"+PRId64+":%02"+PRId64+"", (t)/3600, ((t)%3600)/60, (t)%60)
+	return fmt.Sprintf("%d:%02d:%02d", (t)/3600, ((t)%3600)/60, (t)%60)
 }
 
 func FORMAT_TIME_MMSS(t int64) string {
-	return fmt.Sprintf("%02"+PRId64+":%02"+PRId64+"", (t)/60, (t)%60)
+	return fmt.Sprintf("%02d:%02d", (t)/60, (t)%60)
 }
 func SnprintfRate(rate float64, format string) string {
 	if rate == -1 {

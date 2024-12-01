@@ -1034,11 +1034,11 @@ func (this *NinjaMain) ToolDeps(options *Options, args []string) int {
 			Error("%s", err) // Log and ignore Stat() errors;
 		}
 		if mtime == 0 || mtime > deps.mtime {
-			fmt.Printf("%s: #deps %d, deps mtime %"+PRId64+" (%s)\n",
+			fmt.Printf("%s: #deps %d, deps mtime %d (%s)\n",
 				it.path(), deps.node_count, deps.mtime,
 				"STALE")
 		} else {
-			fmt.Printf("%s: #deps %d, deps mtime %"+PRId64+" (%s)\n",
+			fmt.Printf("%s: #deps %d, deps mtime %d (%s)\n",
 				it.path(), deps.node_count, deps.mtime,
 				"VALID")
 		}
@@ -1102,7 +1102,7 @@ func ToolTargetsList2(state *State, rule_name string) int {
 	}
 
 	// Print them.
-	for _, i := range rules {
+	for i, _ := range rules {
 		fmt.Printf("%s\n", i)
 	}
 

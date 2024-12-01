@@ -84,8 +84,8 @@ func (this *Metrics) Report() {
 	for _, i := range this.metrics_ {
 		metric := i
 		micros := TimerToMicrosInt64(metric.sum)
-		total := micros / 1000
-		avg := micros / int64(metric.count)
+		total := float64(micros) / float64(1000)
+		avg := float64(micros) / float64(metric.count)
 		fmt.Printf("%-*s\t%-6d\t%-8.1f\t%.1f\n", width, metric.name, metric.count, avg, total)
 	}
 }

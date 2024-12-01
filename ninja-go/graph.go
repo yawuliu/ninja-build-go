@@ -123,7 +123,7 @@ func (this *Node) AddValidationOutEdge(edge *Edge) {
 }
 
 func (this *Node) Dump(prefix string) {
-	fmt.Printf("%s <%s 0x%p> mtime: %"+PRId64+"%s, (:%s), ",
+	fmt.Printf("%s <%s 0x%p> mtime: %d%s, (:%s), ",
 		prefix,
 		this.path(),
 		this,

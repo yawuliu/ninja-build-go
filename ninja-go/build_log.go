@@ -211,7 +211,7 @@ func (this *BuildLog) LookupByOutput(path string) *LogEntry {
 
 // / Serialize an entry into a log file.
 func (this *BuildLog) WriteEntry(f *os.File, entry *LogEntry) (bool, error) {
-	_, err := fmt.Fprintf(f, "%d\t%d\t%"+PRId64+"\t%s\t%"+PRIx64+"\n",
+	_, err := fmt.Fprintf(f, "%d\t%d\t%d\t%s\t%d\n",
 		entry.start_time, entry.end_time, entry.mtime,
 		entry.output, entry.command_hash)
 	return err == nil, err

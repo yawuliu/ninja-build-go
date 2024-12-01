@@ -62,14 +62,14 @@ func (this *GraphViz) AddTarget(node *Node) {
 	} else {
 		fmt.Printf("\"%p\" [label=\"%s\", shape=ellipse]\n", edge, edge.rule_.name())
 		for _, out := range edge.outputs_ {
-			fmt.Printf("\"%p\" . \"%p\"\n", edge, *out)
+			fmt.Printf("\"%p\" . \"%p\"\n", edge, out)
 		}
 		for i, in := range edge.inputs_ {
 			order_only := ""
 			if edge.is_order_only(int64(i)) {
 				order_only = " style=dotted"
 			}
-			fmt.Printf("\"%p\" . \"%p\" [arrowhead=none%s]\n", (*in), edge, order_only)
+			fmt.Printf("\"%p\" . \"%p\" [arrowhead=none%s]\n", in, edge, order_only)
 		}
 	}
 

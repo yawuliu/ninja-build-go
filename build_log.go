@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
   "strconv"
+  "strings"
 )
 
 type LineReader struct {
@@ -130,130 +131,108 @@ func (this *BuildLog) Close() {
 }
 
 // / Load the on-disk log.
-func (this *BuildLog) Load(path string, err *string) LoadStatus {
-  METRIC_RECORD(".ninja_log load");
-  file,err1 := os.Open(path);
-  if err1!=nil {
-    if errors.Is(err1, os.ErrNotExist) {
-		return LOAD_NOT_FOUND
-	}
-    *err = err1.Error()
-    return LOAD_ERROR;
+func (this *BuildLog) Load(path string, err1 *string) LoadStatus {
+  file, err := os.Open(path)
+  if err != nil {
+    if errors.Is(err, os.ErrNotExist) {
+      return LOAD_NOT_FOUND
+    }
+    *err1 = err.Error()
+    return LOAD_ERROR
   }
+  defer file.Close()
 
-  log_version := 0
-  unique_entry_count := 0
-  total_entry_count := 0
+  logVersion := 0
+  uniqueEntryCount := 0
+  totalEntryCount := 0
 
-   reader := NewLineReader(file);
-   line_start := 0;
-  line_end := 0;
-  for reader.ReadLine(&line_start, &line_end) {
-    if log_version==0 {
-      sscanf(line_start, kFileSignature, &log_version);
-
-      invalid_log_version := false;
-      if (log_version < kOldestSupportedVersion) {
-        invalid_log_version = true;
-        *err = "build log version is too old; starting over";
-
-      } else if (log_version > kCurrentVersion) {
-        invalid_log_version = true;
-        *err = "build log version is too new; starting over";
+  reader := bufio.NewReader(file)
+  for {
+    line, err := reader.ReadString('\n')
+    if err != nil {
+      if err == io.EOF {
+        break
       }
-      if (invalid_log_version) {
-        file.Close()
-        os.RemoveAll(path)
-        // Don't report this as a failure. A missing build log will cause
-        // us to rebuild the outputs anyway.
-        return LOAD_NOT_FOUND;
+      *err1 = err.Error()
+      return LOAD_ERROR
+    }
+    line = strings.TrimSpace(line)
+
+    if logVersion == 0 {
+      const signaturePrefix = " ninja_log_v"
+      if strings.HasPrefix(line, signaturePrefix) {
+        versionStr := strings.TrimPrefix(line, signaturePrefix)
+        logVersion, err = strconv.Atoi(versionStr)
+        if err != nil {
+          *err1 = err.Error()
+          return LOAD_ERROR
+        }
+
+        if logVersion < kOldestSupportedVersion {
+          *err1 = fmt.Errorf("build log version is too old; starting over").Error()
+          return LOAD_NOT_FOUND
+        } else if logVersion > kCurrentVersion {
+          *err1 = fmt.Errorf("build log version is too new; starting over").Error()
+          return LOAD_NOT_FOUND
+        }
       }
     }
 
-    // If no newline was found in this chunk, read the next.
-    if line_end==0 {
+    fields := strings.Split(line, "\t")
+    if len(fields) < 4 {
       continue
     }
 
-     kFieldSeparator := '\t';
-
-    start := line_start;
-    end := static_cast<char*>(memchr(start, kFieldSeparator, line_end - start));
-    if  end == 0 {
+    startTime, err := strconv.Atoi(fields[0])
+    if err != nil {
       continue
     }
-    *end = 0;
-
-    start_time := 0
-    end_time := 0;
-     var mtime TimeStamp = 0;
-
-    start_time,_ = strconv.Atoi(start)
-    start = end + 1;
-
-    end = static_cast<char*>(memchr(start, kFieldSeparator, line_end - start));
-    if (!end) {
+    endTime, err := strconv.Atoi(fields[1])
+    if err != nil {
       continue
     }
-    *end = 0;
-    end_time,_ = strconv.Atoi(start);
-    start = end + 1;
-
-    end = static_cast<char*>(memchr(start, kFieldSeparator, line_end - start));
-    if end==0 {
+    mtime, err := strconv.ParseInt(fields[2], 10, 64)
+    if err != nil {
       continue
     }
-    *end = 0;
-    mtime = strtoll(start, nil, 10);
-    start = end + 1;
+    output := fields[3]
 
-    end = static_cast<char*>(memchr(start, kFieldSeparator, line_end - start));
-    if end==0 {
-      continue
+    entry, exists := this.entries_[output]
+    if !exists {
+      entry = &LogEntry{output: output}
+      this.entries_[output] = entry
+      uniqueEntryCount++
     }
-    output := string(start, end - start);
+    totalEntryCount++
 
-    start = end + 1;
-    end = line_end;
+    entry.start_time = startTime
+    entry.end_time = endTime
+    entry.mtime = TimeStamp(mtime)
 
-    var entry *LogEntry =nil
-    i := this.entries_.find(output);
-    if (i != this.entries_.end()) {
-      entry = i.second;
-    } else {
-      entry = NewLogEntry(output);
-      this.entries_[entry.output] = entry
-      unique_entry_count++
+    if len(fields) > 4 {
+      commandHash, err := strconv.ParseUint(fields[4], 16, 64)
+      if err != nil {
+        continue
+      }
+      entry.command_hash = commandHash
     }
-    total_entry_count++
-
-    entry.start_time = start_time;
-    entry.end_time = end_time;
-    entry.mtime = mtime;
-    c := *end
-    *end = '\000';
-    entry.command_hash = strtoull(start, nil, 16);
-    *end = c;
   }
-  file.Close()
-
-  if line_start==0 {
-    return LOAD_SUCCESS; // file was empty
-  }
-
   // Decide whether it's time to rebuild the log:
   // - if we're upgrading versions
   // - if it's getting large
-  kMinCompactionEntryCount := 100;
-  kCompactionRatio := 3;
-  if (log_version < kCurrentVersion) {
-    this.needs_recompaction_ = true;
-  } else if (total_entry_count > kMinCompactionEntryCount &&
-             total_entry_count > unique_entry_count * kCompactionRatio) {
-    this.needs_recompaction_ = true;
+  kMinCompactionEntryCount := 100
+   kCompactionRatio := 3
+  if logVersion < kCurrentVersion {
+    this.needs_recompaction_ = true
+  } else if totalEntryCount > kMinCompactionEntryCount && totalEntryCount > uniqueEntryCount*kCompactionRatio {
+    this.needs_recompaction_ = true
   }
 
-  return LOAD_SUCCESS;
+  if uniqueEntryCount == 0 {
+    return LOAD_SUCCESS
+  }
+
+  return LOAD_SUCCESS
 }
 
 // / Lookup a previously-run command by its output path.

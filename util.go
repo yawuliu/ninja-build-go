@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 )
 
 func islatinalpha(c uint8) bool {
@@ -157,4 +158,42 @@ func GetWin32EscapedString(input string, result1 *string) {
 	result.WriteString(strings.Repeat(string(kBackslash), consecutiveBackslashCount))
 	result.WriteRune(kQuote)
 	*result1 = result.String()
+}
+
+// GetLoadAverage 获取系统负载平均值
+func GetLoadAverage() float64 {
+	var rlim syscall.Rlimit
+	err := syscall.Getrlimit(syscall.RLIMIT_NPROC, &rlim)
+	if err != nil {
+		fmt.Println("Error getting system limits:", err)
+		return -1
+	}
+
+	// 获取处理器数量
+	var numCPU int
+	if runtime.NumCPU() > 0 {
+		numCPU = runtime.NumCPU()
+	} else {
+		fmt.Println("Error getting number of CPUs:", err)
+		return -1
+	}
+
+	// 获取系统运行时间和用户运行时间
+	var sysUsage syscall.Sysinfo_t
+	err = syscall.Sysinfo(&sysUsage)
+	if err != nil {
+		fmt.Println("Error getting system info:", err)
+		return -1
+	}
+
+	// 计算负载平均值
+	// 注意：这里的计算方法可能与 UNIX 系统上的计算方法不同
+	loadAvg := float64(sysUsage.Idle) / float64(sysUsage.Total)
+
+	// 将系统负载转换为与 UNIX 系统相似的值
+	// 这里我们简单地将 1.0（完全空闲）转换为 0.0（完全忙碌）
+	// 并乘以 CPU 数量来得到一个近似的负载平均值
+	posixCompatibleLoad := (1.0 - loadAvg) * float64(numCPU)
+
+	return posixCompatibleLoad
 }

@@ -16,12 +16,13 @@ type RealDiskInterface struct {
 }
 
 type FileReader interface {
-	ReadFile(path string, contents *string, err *string) StatusEnum
-	MakeDirs(path string) (bool, error)
 	Stat(path string, err *string) TimeStamp
 	WriteFile(path string, contents string) bool
 	MakeDir(path string) bool
+	MakeDirs(path string) (bool, error)
+	ReadFile(path string, contents *string, err *string) StatusEnum
 	RemoveFile(path string) int
+	AllowStatCache(allow bool)
 }
 
 type DiskInterface interface {

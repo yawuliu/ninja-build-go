@@ -32,7 +32,7 @@ type Builder struct {
 	state_          *State
 	config_         *BuildConfig
 	plan_           Plan
-	command_runner_ *CommandRunner
+	command_runner_ CommandRunner
 	status_         Status
 
 	running_edges_ RunningEdgeMap

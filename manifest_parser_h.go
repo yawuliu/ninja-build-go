@@ -23,7 +23,11 @@ func NewManifestParserOptions() *ManifestParserOptions {
 }
 
 type ManifestParser struct {
-	*Parser
+	Parser
+	state_       *State
+	file_reader_ FileReader
+	lexer_       Lexer
+	//
 	env_     *BindingEnv
 	options_ *ManifestParserOptions
 	quiet_   bool
@@ -37,10 +41,15 @@ type ManifestParser struct {
 	validations_ []EvalString
 }
 
+func (this *ManifestParser) NewParser(state *State, file_reader FileReader) {
+	this.state_ = state
+	this.file_reader_ = file_reader
+}
+
 // = ManifestParserOptions()
 func NewManifestParser(state *State, file_reader FileReader, options *ManifestParserOptions) *ManifestParser {
 	ret := ManifestParser{}
-	ret.Parser = NewParser(state, file_reader)
+	ret.NewParser(state, file_reader)
 	ret.options_ = options
 	ret.quiet_ = false
 	ret.env_ = &state.bindings_
@@ -213,6 +222,24 @@ func (this *ManifestParser) ParseLet(key *string, value *EvalString, err *string
 	}
 	return true
 }
+
+// remove 从 slice 中移除指定元素
+func remove(slice []*Node, out *Node) []*Node {
+	newEnd := -1
+	for i, node := range slice {
+		if node == out {
+			newEnd = i
+			break
+		}
+	}
+
+	if newEnd != -1 {
+		slice = append(slice[:newEnd], slice[newEnd+1:]...)
+	}
+
+	return slice
+}
+
 func (this *ManifestParser) ParseEdge(err *string) bool {
 	this.ins_ = []EvalString{}
 	this.outs_ = []EvalString{}
@@ -411,9 +438,15 @@ func (this *ManifestParser) ParseEdge(err *string) bool {
 		// build graph but that has since been fixed.  Filter them out to
 		// support users of those old CMake versions.
 		out := edge.outputs_[0]
-		new_end := remove(edge.inputs_.begin(), edge.inputs_.end(), out)
-		if new_end != edge.inputs_.end() {
-			edge.inputs_.erase(new_end, edge.inputs_.end())
+		new_end := -1 // 用于记录 out 节点的索引位置
+		for i, node := range edge.inputs_ {
+			if node == out {
+				new_end = i
+				break
+			}
+		}
+		if new_end != -1 {
+			edge.inputs_ = append(edge.inputs_[:new_end], edge.inputs_[new_end+1:]...)
 			if !this.quiet_ {
 				Warning("phony target '%s' names itself as an input; "+
 					"ignoring [-w phonycycle=warn]", out.path())
@@ -482,7 +515,7 @@ func (this *ManifestParser) ParseFileInclude(new_scope bool, err *string) bool {
 	path := eval.Evaluate(this.env_)
 
 	if this.subparser_ == nil {
-		this.subparser_.reset(NewManifestParser(this.state_, this.file_reader_, this.options_))
+		this.subparser_ = NewManifestParser(this.state_, this.file_reader_, this.options_)
 	}
 	if new_scope {
 		this.subparser_.env_ = NewBindingEnvWithParent(this.env_)

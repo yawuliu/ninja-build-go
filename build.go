@@ -46,9 +46,8 @@ func (this *Plan) FindWork() *Edge {
 		return nil
 	}
 
-	work := this.ready_.top()
-	this.ready_.pop()
-	return work
+	work := this.ready_.Poll()
+	return work.(*Edge)
 }
 
 // / Returns true if there's more work to be done.
@@ -100,7 +99,7 @@ func (this *Plan) EdgeFinished(edge *Edge, result EdgeResult, err *string) bool 
 	if directly_wanted {
 		this.wanted_edges_--
 	}
-	delete(this.want_, second)
+	delete(this.want_, edge)
 	edge.outputs_ready_ = true
 
 	// Check off any nodes we were waiting for with this edge.
@@ -110,10 +109,6 @@ func (this *Plan) EdgeFinished(edge *Edge, result EdgeResult, err *string) bool 
 		}
 	}
 	return true
-}
-
-func MEM_FN() {
-
 }
 
 // / Clean the given node during the build.
@@ -234,7 +229,7 @@ func (this *Plan) DyndepsLoaded(scan *DependencyScan, node *Node, ddf DyndepFile
 	}
 
 	// Walk dyndep-discovered portion of the graph to add it to the build plan.
-	dyndep_walk := set.New() // std::set<Edge*>
+	dyndep_walk := map[*Edge]bool{} // std::set<*>
 	for _, oei := range dyndep_roots {
 		for _, i := range oei.implicit_inputs_ {
 			if !this.AddSubTarget(i, oei.outputs_[0], err, &dyndep_walk) && *err != "" {
@@ -246,24 +241,23 @@ func (this *Plan) DyndepsLoaded(scan *DependencyScan, node *Node, ddf DyndepFile
 	// Add out edges from this node that are in the plan (just as
 	// Plan::NodeFinished would have without taking the dyndep code path).
 	for _, oe := range node.out_edges() {
-		want_e := this.want_.find(*oe)
-		if want_e == this.want_.end() {
+		_, ok := this.want_[oe]
+		if !ok {
 			continue
 		}
-		dyndep_walk.Add(want_e.first)
+		dyndep_walk[oe] = true
 	}
 
 	// See if any encountered edges are now ready.
-	dyndep_walk.Iterate(func(wi interface{}) bool {
+	for wi, _ := range dyndep_walk {
 		want_e, ok := this.want_[wi]
 		if !ok {
-			return
+			continue
 		}
 		if !this.EdgeMaybeReady(want_e, err) {
 			return false
 		}
-		return
-	})
+	}
 
 	return true
 }
@@ -410,12 +404,12 @@ func (this *Plan) RefreshDyndepDependents(scan *DependencyScan, node *Node, err 
 		if edge && !edge.outputs_ready() {
 			panic("edge && !edge.outputs_ready()")
 		}
-		want_e := this.want_.find(edge)
-		if want_e != this.want_.end() {
+		want_e_second, ok := this.want_[edge]
+		if !ok {
 			panic("want_e != this.want_.end()")
 		}
-		if want_e.second == kWantNothing {
-			want_e.second = kWantToStart
+		if want_e_second == kWantNothing {
+			this.want_[edge] = kWantToStart
 			this.EdgeWanted(edge)
 		}
 	}
@@ -503,7 +497,7 @@ func (this *Plan) ScheduleInitialEdges() {
 	if this.ready_.IsEmpty() {
 		panic("ready_.empty()")
 	}
-	pools := set.New() // std::set<Pool*>
+	pools := map[*Pool]bool{} // std::set<*>
 
 	for first, second := range this.want_ {
 		edge := first
@@ -522,8 +516,8 @@ func (this *Plan) ScheduleInitialEdges() {
 	// Call RetrieveReadyEdges only once at the end so higher priority
 	// edges are retrieved first, not the ones that happen to be first
 	// in the want_ map.
-	for _, it := range pools {
-		it.RetrieveReadyEdges(&this.ready_)
+	for it, _ := range pools {
+		it.RetrieveReadyEdges(this.ready_)
 	}
 }
 
@@ -544,8 +538,8 @@ func (this *Plan) NodeFinished(node *Node, err *string) bool {
 
 	// See if we we want any edges from this node.
 	for _, oe := range node.out_edges() {
-		want_e := this.want_.find(*oe)
-		if want_e == this.want_.end() {
+		want_e, ok := this.want_[oe]
+		if !ok {
 			continue
 		}
 
@@ -567,7 +561,7 @@ func (this *Plan) EdgeWanted(edge *Edge) {
 	}
 }
 func (this *Plan) EdgeMaybeReady(want_e Want, err *string) bool {
-	edge := want_e.first
+	edge := want_e
 	if edge.AllInputsReady() {
 		if want_e.second != kWantNothing {
 			this.ScheduleWork(want_e)
@@ -602,16 +596,16 @@ func NewResult() *Result {
 func (this *Result) success() bool { return this.status == ExitSuccess }
 
 type CommandRunner interface {
-	ReleaseCommandRunner()
+	//ReleaseCommandRunner()
 	StartCommand(edge *Edge) bool
-	WaitForCommand() (Result, bool)
+	WaitForCommand(result *Result) bool
 	GetActiveEdges() []*Edge
 	CanRunMore() int64
 	Abort()
 }
 
 func CommandRunnerfactory(config *BuildConfig) CommandRunner {
-
+	return NewRealCommandRunner(config)
 }
 
 type DryRunCommandRunner struct {
@@ -630,7 +624,7 @@ func (this *DryRunCommandRunner) WaitForCommand(result *Result) bool {
 	}
 
 	result.status = ExitSuccess
-	result.edge = this.finished_.Front()
+	result.edge = this.finished_.Front().(*Edge)
 	this.finished_.PopFront()
 	return true
 }
@@ -768,9 +762,9 @@ func (this *Builder) Build(err *string) bool {
 	// Set up the command runner if we haven't done so already.
 	if this.command_runner_ == nil {
 		if this.config_.dry_run {
-			this.command_runner_.reset(NewDryRunCommandRunner)
+			this.command_runner_ = &DryRunCommandRunner{}
 		} else {
-			this.command_runner_.reset(CommandRunnerfactory(this.config_))
+			this.command_runner_ = CommandRunnerfactory(this.config_)
 		}
 	}
 
@@ -955,23 +949,23 @@ func (this *Builder) FinishCommand(result *Result, err *string) bool {
 	deps_prefix := edge.GetBinding("msvc_deps_prefix")
 	if deps_type != "" {
 		extract_err := ""
-		if !this.ExtractDeps(result, deps_type, deps_prefix, &deps_nodes,
+		if !this.ExtractDeps(result, deps_type, deps_prefix, deps_nodes,
 			&extract_err) &&
 			result.success() {
-			if !result.output.empty() {
-				result.output.append("\n")
+			if result.output != "" {
+				result.output += "\n"
 			}
-			result.output.append(extract_err)
+			result.output += extract_err
 			result.status = ExitFailure
 		}
 	}
 
 	start_time_millis := int64(0)
 	end_time_millis := int64(0)
-	it := this.running_edges_.find(edge)
-	start_time_millis = it.second
+	it_second, _ := this.running_edges_[edge]
+	start_time_millis = int64(it_second)
 	end_time_millis = GetTimeMillis() - this.start_time_millis_
-	this.running_edges_.erase(it)
+	delete(this.running_edges_, edge)
 
 	this.status_.BuildEdgeFinished(edge, start_time_millis, end_time_millis,
 		result.success(), result.output)
@@ -1068,12 +1062,12 @@ func (this *Builder) ExtractDeps(result *Result, deps_type string, deps_prefix s
 			return false
 		}
 		result.output = output
-		for _, i := range parser.includes_ {
+		for i, _ := range parser.includes_ {
 			// ~0 is assuming that with MSVC-parsed headers, it's ok to always make
 			// all backslashes (as some of the slashes will certainly be backslashes
 			// anyway). This could be fixed if necessary with some additional
 			// complexity in IncludesNormalize::Relativize.
-			deps_nodes = append(deps_nodes, this.state_.GetNode(*i, ~0))
+			deps_nodes = append(deps_nodes, this.state_.GetNode(i, ~0))
 		}
 	} else if deps_type == "gcc" {
 		depfile := result.edge.GetUnescapedDepfile()

@@ -2,6 +2,10 @@ package main
 
 type DyndepParser struct {
 	Parser
+	state_       *State
+	file_reader_ FileReader
+	lexer_       Lexer
+	//
 	dyndep_file_ DyndepFile
 	env_         BindingEnv
 }

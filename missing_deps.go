@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/ahrtr/gocontainer/set"
+	"slices"
 )
 
 type NodeStoringImplicitDepLoader struct {
@@ -129,7 +130,7 @@ func (this *MissingDependencyScanner) HadMissingDeps() bool {
 
 func (this *MissingDependencyScanner) ProcessNodeDeps(node *Node, dep_nodes []*Node) {
 	edge := node.in_edge()
-	deplog_edges := set.New() //[]*Edge{}
+	deplog_edges := []*Edge{}
 	for i := 0; i < len(dep_nodes); i++ {
 		deplog_node := dep_nodes[i]
 		// Special exception: A dep on build.ninja can be used to mean "always
@@ -142,8 +143,8 @@ func (this *MissingDependencyScanner) ProcessNodeDeps(node *Node, dep_nodes []*N
 			return
 		}
 		deplog_edge := deplog_node.in_edge()
-		if deplog_edge != nil {
-			deplog_edges.Add(deplog_edge)
+		if deplog_edge != nil && !slices.Contains(deplog_edges, deplog_edge) {
+			deplog_edges = append(deplog_edges, deplog_edge)
 		}
 	}
 	missing_deps := []*Edge{}
@@ -172,10 +173,11 @@ func (this *MissingDependencyScanner) ProcessNodeDeps(node *Node, dep_nodes []*N
 
 func (this *MissingDependencyScanner) PathExistsBetween(from, to *Edge) bool {
 	second, ok := this.adjacency_map_[from]
+	var inner_it InnerAdjacencyMap = nil
 	if ok {
-		inner_it, ok1 := second[to]
+		_, ok1 := second[to]
 		if ok1 {
-			return inner_it
+			return true
 		}
 	} else {
 		inner_it = InnerAdjacencyMap{}
@@ -184,7 +186,7 @@ func (this *MissingDependencyScanner) PathExistsBetween(from, to *Edge) bool {
 	found := false
 	for i := 0; i < len(to.inputs_); i++ {
 		e := to.inputs_[i].in_edge()
-		if e && (e == from || this.PathExistsBetween(from, e)) {
+		if e != nil && (e == from || this.PathExistsBetween(from, e)) {
 			found = true
 			break
 		}

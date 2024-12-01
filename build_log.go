@@ -9,6 +9,59 @@ import (
   "strconv"
 )
 
+type LineReader struct {
+  file_ *os.File
+  buf_ string
+  buf_end_ int64  // Points one past the last valid byte in |buf_|.
+
+  line_start_ int64
+  // Points at the next \n in buf_ after line_start, or NULL.
+  line_end_ int64
+}
+func NewLineReader(file *os.File) * LineReader{
+ ret := LineReader{}
+  ret.file_ = file
+  ret.buf_end_=0
+  ret.line_start_=0
+  ret.line_end_ = 0
+ return &ret
+}
+// Reads a \n-terminated line from the file passed to the constructor.
+  // On return, *line_start points to the beginning of the next line, and
+  // *line_end points to the \n at the end of the line. If no newline is seen
+  // in a fixed buffer size, *line_end is set to NULL. Returns false on EOF.
+ func  (this* LineReader)ReadLine(line_start, line_end *int64)bool {
+    if this.line_start_ >= this.buf_end_ || this.line_end_==0 {
+      // Buffer empty, refill.
+      size_read := fread(this.buf_, 1, sizeof(this.buf_), this.file_);
+      if (!size_read) {
+        return false
+      }
+      this.line_start_ = this.buf_;
+      this.buf_end_ = this.buf_ + size_read;
+    } else {
+      // Advance to next line in buffer.
+      this.line_start_ = this.line_end_ + 1;
+    }
+
+   this.line_end_ = static_cast<char*>(memchr(line_start_, '\n', buf_end_ - line_start_));
+    if this.line_end_==0 {
+      // No newline. Move rest of data to start of buffer, fill rest.
+      already_consumed := this.line_start_ - this.buf_;
+      size_rest := (this.buf_end_ - this.buf_) - already_consumed;
+      memmove(this.buf_, this.line_start_, size_rest);
+
+       read := fread(this.buf_ + size_rest, 1, sizeof(this.buf_) - size_rest, this.file_);
+      this.buf_end_ = this.buf_ + size_rest + read;
+      this.line_start_ = this.buf_;
+      this.line_end_ = static_cast<char*>(memchr(this.line_start_, '\n', this.buf_end_ - this.line_start_));
+    }
+
+    *line_start = this.line_start_;
+    *line_end = this.line_end_;
+    return true;
+  }
+
 func NewBuildLog() *BuildLog {
 	ret := BuildLog{}
 	return &ret
@@ -361,7 +414,7 @@ func (this *BuildLog) OpenForWriteIfNeeded() bool {
 }
 
 func HashCommand(command string) uint64 {
-
+  return rapidhash(command);
 }
 
 // Used by tests.

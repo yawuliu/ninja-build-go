@@ -289,10 +289,10 @@ func (this *StatusPrinter) FormatProgressStatus(progress_status_format string, t
 					out += buf
 				}
 				// Wall time
-			case 'e': // elapsed, seconds
-			case 'w': // elapsed, human-readable
-			case 'E': // ETA, seconds
-			case 'W': // ETA, human-readable
+			// elapsed, seconds
+			case 'e', 'w', 'E', 'W': // elapsed, human-readable
+				// ETA, seconds
+				// ETA, human-readable
 				{
 					elapsed_sec := this.time_millis_ / 1e3
 					eta_sec := -1 // To be printed as "?".

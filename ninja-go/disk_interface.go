@@ -188,7 +188,7 @@ type win32VolumeInfo struct {
 // / Create a file, with the specified name and contents
 // / Returns true on success, false on failure
 func (this *RealDiskInterface) WriteFile(path string, contents string) bool {
-	fp, err := os.Open(path)
+	fp, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0664)
 	if err != nil {
 		Error("WriteFile(%s): Unable to create file. %v", path, err)
 		return false

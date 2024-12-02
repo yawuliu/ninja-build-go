@@ -424,6 +424,7 @@ const (
 // / Returns an exit code, or -1 if Ninja should continue.
 func ReadFlags(args *[]string, options *Options, config *BuildConfig) int {
 	deferGuessParallelism := NewDeferGuessParallelism(config)
+	defer deferGuessParallelism.ReleaseDeferGuessParallelism()
 	//kLongOptions  :=  []option{
 	//  { "help", no_argument, nil, 'h' },
 	//  { "version", no_argument, nil, OPT_VERSION },

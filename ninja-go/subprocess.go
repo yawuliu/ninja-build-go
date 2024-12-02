@@ -1,6 +1,7 @@
 package ninja_go
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -18,25 +19,52 @@ func NewSubprocess(use_console bool) *Subprocess {
 	ret.use_console = use_console
 	return &ret
 }
+
+// https://github.com/go-cmd/cmd
 func (this *Subprocess) Start(set *SubprocessSet, command string) bool {
-	if this.use_console {
-		if runtime.GOOS == "windows" {
-			this.cmd = exec.Command("cmd", "/c", command)
-		} else {
-			this.cmd = exec.Command("bash", "-c", command)
-		}
+	fmt.Println(command)
+	//if true || this.use_console {
+	if runtime.GOOS == "windows" {
+		args := []string{"/C"}
+		args = append(args, strings.Fields(command)...)
+		this.cmd = exec.Command("cmd", args...) // , "/C", command
 	} else {
-		arr := strings.Split(command, " ")
-		if len(arr) > 1 {
-			this.cmd = exec.Command(arr[0], arr[1:]...)
-		} else {
-			this.cmd = exec.Command(arr[0])
-		}
+		args := []string{"-c"}
+		args = append(args, strings.Fields(command)...)
+		this.cmd = exec.Command("bash", args...) //
 	}
+	//} else {
+	//	arr := strings.Split(command, " ")
+	//	if len(arr) > 1 {
+	//		this.cmd = exec.Command(arr[0], arr[1:]...)
+	//	} else {
+	//		this.cmd = exec.Command(arr[0])
+	//	}
+	//}
+	//buffer := bytes.Buffer{}
+	//buffer.Write([]byte("\r\n" + command + "\r\n"))
+	//this.cmd.Stdin = &buffer
+	//stdin, err := this.cmd.StdinPipe()
+	//if err != nil {
+	//	log.Fatalln(err)
+	//	return false
+	//}
+	this.cmd.Stdout = os.Stdout
+	this.cmd.Stderr = os.Stderr
+	//this.cmd.Env = os.Environ()
 	err := this.cmd.Start()
 	if err != nil {
 		return false
 	}
+	//Write to stdin
+	//_, err = stdin.Write([]byte(command + "\n"))
+	//if err != nil {
+	//	log.Fatalln(err)
+	//	return false
+	//}
+	//
+	//// Close stdin to signal the end of input
+	//stdin.Close()
 	return true
 }
 
@@ -107,13 +135,14 @@ func (this *SubprocessSet) DoWork() bool {
 	if len(this.running_) == 0 {
 		return true
 	}
-	subproc := this.running_[0]
+	subproc := this.running_[len(this.running_)-1]
 	err := subproc.cmd.Wait()
 	succ := true
 	if err != nil {
+		log.Fatalln(err)
 		succ = false
 	}
-	this.running_ = this.running_[1:]
+	this.running_ = this.running_[0 : len(this.running_)-1]
 	this.finished_ = append(this.finished_, subproc)
 	return succ
 }

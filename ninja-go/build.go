@@ -183,11 +183,12 @@ func NewBuilder(state *State, config *BuildConfig, build_log *BuildLog,
 	ret.start_time_millis_ = start_time_millis
 	ret.disk_interface_ = disk_interface
 	if g_explaining {
-		ret.explanations_ = nil //Explanations{}
+		ret.explanations_ = NewOptionalExplanations()
 	} else {
-		ret.explanations_ = nil
+		ret.explanations_ = NewOptionalExplanations()
 	}
-	ret.scan_ = NewDependencyScan(state, build_log, deps_log, disk_interface, ret.config_.DepfileParserOptions, ret.explanations_)
+	ret.scan_ = NewDependencyScan(state, build_log, deps_log, disk_interface,
+		ret.config_.DepfileParserOptions, ret.explanations_)
 	ret.lock_file_path_ = ".ninja_lock"
 	build_dir := ret.state_.bindings_.LookupVariable("builddir")
 	if build_dir != "" {

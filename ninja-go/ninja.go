@@ -41,7 +41,7 @@ const (
 )
 
 // / The type of functions that are the entry points to tools (subcommands).
-type ToolFunc func(*Options, []string) int
+type ToolFunc func(*Options, *[]string) int
 
 // / Subtools, accessible via "-t foo".
 type Tool struct {
@@ -76,7 +76,7 @@ type NinjaMain struct {
 	/// The build directory, used for storing the build log etc.
 	BuildDir string
 
-	BuildLog BuildLog
+	BuildLog *BuildLog
 	DepsLog  DepsLog
 
 	StartTimeMillis int64
@@ -88,6 +88,7 @@ func NewNinjaMain(ninja_command string, config *BuildConfig) *NinjaMain {
 	ret.Config_ = config
 	ret.StartTimeMillis = GetTimeMillis()
 	ret.State_ = NewState()
+	ret.BuildLog = NewBuildLog()
 	return &ret
 }
 
@@ -102,33 +103,33 @@ func (this *NinjaMain) EnsureBuildDirExists() bool {
 	}
 	return true
 }
-func (this *NinjaMain) CollectTargetsFromArgs(args []string, targets []*Node, err *string) bool {
-	if len(args) == 0 {
-		targets = this.State_.DefaultNodes(err)
+func (this *NinjaMain) CollectTargetsFromArgs(args *[]string, targets *[]*Node, err *string) bool {
+	if len(*args) == 0 {
+		*targets = this.State_.DefaultNodes(err)
 		return *err == ""
 	}
 
-	for i := 0; i < len(args); i++ {
-		node := this.CollectTarget(args[i], err)
+	for i := 0; i < len(*args); i++ {
+		node := this.CollectTarget((*args)[i], err)
 		if node == nil {
 			return false
 		}
-		targets = append(targets, node)
+		*targets = append(*targets, node)
 	}
 	return true
 }
 
-func (this *NinjaMain) RunBuild(args []string, status Status) int {
+func (this *NinjaMain) RunBuild(args *[]string, status Status) int {
 	err := ""
 	targets := []*Node{}
-	if !this.CollectTargetsFromArgs(args, targets, &err) {
+	if !this.CollectTargetsFromArgs(args, &targets, &err) {
 		status.Error("%s", err)
 		return 1
 	}
 
 	this.DiskInterface.AllowStatCache(g_experimental_statcache)
 
-	builder := NewBuilder(this.State_, this.Config_, &this.BuildLog, &this.DepsLog, &this.DiskInterface, status, this.StartTimeMillis)
+	builder := NewBuilder(this.State_, this.Config_, this.BuildLog, &this.DepsLog, &this.DiskInterface, status, this.StartTimeMillis)
 	for i := 0; i < len(targets); i++ {
 		if !builder.AddTarget2(targets[i], &err) {
 			if err != "" {
@@ -257,7 +258,7 @@ func (this *NinjaMain) RebuildManifest(input_file string, err *string, status St
 		return false
 	}
 
-	builder := NewBuilder(this.State_, this.Config_, &this.BuildLog, &this.DepsLog, &this.DiskInterface, status, this.StartTimeMillis)
+	builder := NewBuilder(this.State_, this.Config_, this.BuildLog, &this.DepsLog, &this.DiskInterface, status, this.StartTimeMillis)
 	if !builder.AddTarget2(node, err) {
 		return false
 	}
@@ -421,7 +422,7 @@ const (
 
 // / Parse argv for command-line options.
 // / Returns an exit code, or -1 if Ninja should continue.
-func ReadFlags(args []string, options *Options, config *BuildConfig) int {
+func ReadFlags(args *[]string, options *Options, config *BuildConfig) int {
 	deferGuessParallelism := NewDeferGuessParallelism(config)
 	//kLongOptions  :=  []option{
 	//  { "help", no_argument, nil, 'h' },
@@ -431,10 +432,11 @@ func ReadFlags(args []string, options *Options, config *BuildConfig) int {
 	//  { "", 0, nil, 0 },
 	//}
 
-	opts, _, err := getopt.Getopts(args, "d:f:j:k:l:nt:vw:C:h")
+	opts, optind, err := getopt.Getopts(*args, "d:f:j:k:l:nt:vw:C:h")
 	if err != nil {
 		log.Fatalln(err)
 	}
+	*args = (*args)[optind:]
 	//for options.tool==nil && (opt = getopt_long(os.Args, "d:f:j:k:l:nt:vw:C:h", kLongOptions, nil)) != -1 {
 	for _, optV := range opts {
 		opt := optV.Option
@@ -541,30 +543,30 @@ func UsageMain(config *BuildConfig) {
 		kNinjaVersion, config.Parallelism)
 }
 
-func (this *NinjaMain) ToolBrowse(options *Options, args []string) int {
+func (this *NinjaMain) ToolBrowse(options *Options, args *[]string) int {
 	RunBrowsePython(this.State_, this.NinjaCommand, options.InputFile, args)
 	// If we get here, the browse failed.
 	return 1
 }
 
-func (this *NinjaMain) ToolMSVC(options *Options, args []string) int {
+func (this *NinjaMain) ToolMSVC(options *Options, args *[]string) int {
 	// Reset getopt: push one argument onto the front of argv, reset optind.
 	optind = 0
 	return MSVCHelperMain(args)
 }
 
-func (this *NinjaMain) ToolClean(options *Options, args []string) int {
+func (this *NinjaMain) ToolClean(options *Options, args *[]string) int {
 	// The clean tool uses getopt, and expects argv[0] to contain the name of
 	// the tool, i.e. "clean".
 
 	generator := false
 	clean_rules := false
 
-	optind = 1
-	opts, _, err := getopt.Getopts(os.Args, "hgr")
+	opts, optind, err := getopt.Getopts(*args, "hgr")
 	if err != nil {
 		log.Fatalln(err)
 	}
+	*args = (*args)[optind:]
 	for _, optV := range opts {
 		opt := optV.Option
 		switch opt {
@@ -583,24 +585,24 @@ func (this *NinjaMain) ToolClean(options *Options, args []string) int {
 		}
 	}
 
-	if clean_rules && len(args) == 0 {
+	if clean_rules && len(*args) == 0 {
 		Error("expected a rule to clean")
 		return 1
 	}
 
 	cleaner := NewCleaner(this.State_, this.Config_, &this.DiskInterface)
-	if len(args) >= 1 {
+	if len(*args) >= 1 {
 		if clean_rules {
-			return cleaner.CleanRules(args)
+			return cleaner.CleanRules(*args)
 		} else {
-			return cleaner.CleanTargets(args)
+			return cleaner.CleanTargets(*args)
 		}
 	} else {
 		return cleaner.CleanAll(generator)
 	}
 }
 
-func (this *NinjaMain) ToolCleanDead(options *Options, args []string) int {
+func (this *NinjaMain) ToolCleanDead(options *Options, args *[]string) int {
 	cleaner := NewCleaner(this.State_, this.Config_, &this.DiskInterface)
 	return cleaner.CleanDead(this.BuildLog.entries())
 }
@@ -631,16 +633,16 @@ func PrintCommands(edge *Edge, seen EdgeSet, mode PrintCommandMode) {
 	}
 }
 
-func (this *NinjaMain) ToolCommands(options *Options, args []string) int {
+func (this *NinjaMain) ToolCommands(options *Options, args *[]string) int {
 	// The commands tool uses getopt, and expects argv[0] to contain the name of
 	// the tool, i.e. "commands".
 	mode := PCM_All
 
-	optind = 1
-	opts, _, err1 := getopt.Getopts(os.Args, "hs")
+	opts, optind, err1 := getopt.Getopts(*args, "hs")
 	if err1 != nil {
 		panic(err1)
 	}
+	*args = (*args)[optind:]
 	for _, optV := range opts {
 		opt := optV.Option
 		switch opt {
@@ -658,7 +660,7 @@ func (this *NinjaMain) ToolCommands(options *Options, args []string) int {
 
 	nodes := []*Node{}
 	err := ""
-	if !this.CollectTargetsFromArgs(args, nodes, &err) {
+	if !this.CollectTargetsFromArgs(args, &nodes, &err) {
 		Error("%s", err)
 		return 1
 	}
@@ -671,7 +673,7 @@ func (this *NinjaMain) ToolCommands(options *Options, args []string) int {
 	return 0
 }
 
-func (this *NinjaMain) ToolInputs(options *Options, args []string) int {
+func (this *NinjaMain) ToolInputs(options *Options, args *[]string) int {
 	// The inputs tool uses getopt, and expects argv[0] to contain the name of
 	// the tool, i.e. "inputs".
 	print0 := false
@@ -685,10 +687,11 @@ func (this *NinjaMain) ToolInputs(options *Options, args []string) int {
 	//                               { "dependency-order", no_argument, nil,
 	//                                 'd' },
 	//                               { "", 0, nil, 0 } }
-	opts, _, err1 := getopt.Getopts(os.Args, "h0Ed")
+	opts, optind, err1 := getopt.Getopts(*args, "h0Ed")
 	if err1 != nil {
 		panic(err1)
 	}
+	*args = (*args)[optind:]
 	for _, optV := range opts {
 		opt := optV.Option
 		switch opt {
@@ -718,7 +721,7 @@ func (this *NinjaMain) ToolInputs(options *Options, args []string) int {
 	}
 	nodes := []*Node{}
 	err := ""
-	if !this.CollectTargetsFromArgs(args, nodes, &err) {
+	if !this.CollectTargetsFromArgs(args, &nodes, &err) {
 		Error("%s", err)
 		return 1
 	}
@@ -747,7 +750,7 @@ func (this *NinjaMain) ToolInputs(options *Options, args []string) int {
 	return 0
 }
 
-func (this *NinjaMain) ToolMultiInputs(options *Options, args []string) int {
+func (this *NinjaMain) ToolMultiInputs(options *Options, args *[]string) int {
 	// The inputs tool uses getopt, and expects argv[0] to contain the name of
 	// the tool, i.e. "inputs".
 
@@ -759,10 +762,11 @@ func (this *NinjaMain) ToolMultiInputs(options *Options, args []string) int {
 	//                                  'd' },
 	//                                { "print0", no_argument, nil, '0' },
 	//                                { "", 0, nil, 0 } }
-	opts, _, err := getopt.Getopts(os.Args, "d:h0")
+	opts, optind, err := getopt.Getopts(*args, "d:h0")
 	if err != nil {
 		panic(err)
 	}
+	*args = (*args)[optind:]
 	for _, optV := range opts {
 		opt := optV.Option
 		optarg := optV.Value
@@ -793,7 +797,7 @@ func (this *NinjaMain) ToolMultiInputs(options *Options, args []string) int {
 
 	nodes := []*Node{}
 	err1 := ""
-	if !this.CollectTargetsFromArgs(args, nodes, &err1) {
+	if !this.CollectTargetsFromArgs(args, &nodes, &err1) {
 		Error("%s", err1)
 		return 1
 	}
@@ -874,7 +878,7 @@ func EvaluateCommandWithRspfile(edge *Edge, mode EvaluateCommandMode) string {
 	return command
 }
 
-func CreateFromArgs(args []string) CompdbTargets {
+func CreateFromArgs(args *[]string) CompdbTargets {
 	//
 	// grammar:
 	//     ninja -t compdb-targets [-hx] target [targets]
@@ -885,11 +889,12 @@ func CreateFromArgs(args []string) CompdbTargets {
 	// the tool, i.e. "compdb-targets".
 
 	// Phase 1: parse options:
-	optind = 1 // see `man 3 getopt` for documentation on optind
-	opts, _, err := getopt.Getopts(os.Args, "hx")
+	// optind = 1  //see `man 3 getopt` for documentation on optind
+	opts, optind, err := getopt.Getopts(*args, "hx")
 	if err != nil {
 		panic(err)
 	}
+	*args = (*args)[optind:]
 	for _, optV := range opts {
 		opt := optV.Option
 		switch opt {
@@ -904,7 +909,7 @@ func CreateFromArgs(args []string) CompdbTargets {
 
 	// Phase 2: parse operands:
 	targets_begin := optind
-	targets_end := len(args)
+	targets_end := len(*args)
 
 	if targets_begin == targets_end {
 		Error("compdb-targets expects the name of at least one target")
@@ -912,14 +917,14 @@ func CreateFromArgs(args []string) CompdbTargets {
 	} else {
 		ret.action = kEmitCommands
 		for i := targets_begin; i < targets_end; i++ {
-			ret.targets = append(ret.targets, args[i])
+			ret.targets = append(ret.targets, (*args)[i])
 		}
 	}
 
 	return ret
 }
 
-func (this *NinjaMain) ToolCompilationDatabaseForTargets(options *Options, args []string) int {
+func (this *NinjaMain) ToolCompilationDatabaseForTargets(options *Options, args *[]string) int {
 	compdb := CreateFromArgs(args)
 
 	switch compdb.action {
@@ -980,7 +985,7 @@ func PrintCompdb(directory string, edges []*Edge, eval_mode EvaluateCommandMode)
 	fmt.Print("\n]")
 }
 
-func (this *NinjaMain) ToolUrtle(options *Options, args []string) int {
+func (this *NinjaMain) ToolUrtle(options *Options, args *[]string) int {
 	// RLE encoded.
 	urtle :=
 		" 13 ,3;2!2;\n8 ,;<11!;\n5 `'<10!(2`'2!\n11 ,6;, `\\. `\\9 .,c13$ec,.\n6 " +
@@ -1007,9 +1012,9 @@ func (this *NinjaMain) ToolUrtle(options *Options, args []string) int {
 	return 0
 }
 
-func (this *NinjaMain) ToolDeps(options *Options, args []string) int {
+func (this *NinjaMain) ToolDeps(options *Options, args *[]string) int {
 	nodes := []*Node{}
-	if len(args) == 0 {
+	if len(*args) == 0 {
 		for _, ni := range this.DepsLog.nodes() {
 			if IsDepsEntryLiveFor(ni) {
 				nodes = append(nodes, ni)
@@ -1017,7 +1022,7 @@ func (this *NinjaMain) ToolDeps(options *Options, args []string) int {
 		}
 	} else {
 		err := ""
-		if !this.CollectTargetsFromArgs(args, nodes, &err) {
+		if !this.CollectTargetsFromArgs(args, &nodes, &err) {
 			Error("%s", err)
 			return 1
 		}
@@ -1055,10 +1060,10 @@ func (this *NinjaMain) ToolDeps(options *Options, args []string) int {
 	return 0
 }
 
-func (this *NinjaMain) ToolMissingDeps(options *Options, args []string) int {
+func (this *NinjaMain) ToolMissingDeps(options *Options, args *[]string) int {
 	nodes := []*Node{}
 	err := ""
-	if !this.CollectTargetsFromArgs(args, nodes, &err) {
+	if !this.CollectTargetsFromArgs(args, &nodes, &err) {
 		Error("%s", err)
 		return 1
 	}
@@ -1131,14 +1136,14 @@ func ToolTargetsSourceList(state *State) int {
 	return 0
 }
 
-func (this *NinjaMain) ToolTargets(options *Options, args []string) int {
+func (this *NinjaMain) ToolTargets(options *Options, args *[]string) int {
 	depth := 1
-	if len(args) >= 1 {
-		mode := args[0]
+	if len(*args) >= 1 {
+		mode := (*args)[0]
 		if mode == "rule" {
 			rule := ""
-			if len(args) > 1 {
-				rule = args[1]
+			if len(*args) > 1 {
+				rule = (*args)[1]
 			}
 			if rule == "" {
 				return ToolTargetsSourceList(this.State_)
@@ -1146,8 +1151,8 @@ func (this *NinjaMain) ToolTargets(options *Options, args []string) int {
 				return ToolTargetsList2(this.State_, rule)
 			}
 		} else if mode == "depth" {
-			if len(args) > 1 {
-				depth, _ = strconv.Atoi(args[1])
+			if len(*args) > 1 {
+				depth, _ = strconv.Atoi((*args)[1])
 			}
 		} else if mode == "all" {
 			return ToolTargetsList1(this.State_)
@@ -1172,8 +1177,8 @@ func (this *NinjaMain) ToolTargets(options *Options, args []string) int {
 		return 1
 	}
 }
-func (this *NinjaMain) ToolWinCodePage(options *Options, args []string) int {
-	if len(args) != 0 {
+func (this *NinjaMain) ToolWinCodePage(options *Options, args *[]string) int {
+	if len(*args) != 0 {
 		fmt.Printf("usage: ninja -t wincodepage\n")
 		return 1
 	}
@@ -1185,10 +1190,10 @@ func (this *NinjaMain) ToolWinCodePage(options *Options, args []string) int {
 
 	return 0
 }
-func (this *NinjaMain) ToolGraph(options *Options, args []string) int {
+func (this *NinjaMain) ToolGraph(options *Options, args *[]string) int {
 	nodes := []*Node{}
 	err := ""
-	if !this.CollectTargetsFromArgs(args, nodes, &err) {
+	if !this.CollectTargetsFromArgs(args, &nodes, &err) {
 		Error("%s", err)
 		return 1
 	}
@@ -1203,17 +1208,17 @@ func (this *NinjaMain) ToolGraph(options *Options, args []string) int {
 	return 0
 }
 
-func (this *NinjaMain) ToolQuery(options *Options, args []string) int {
-	if len(args) == 0 {
+func (this *NinjaMain) ToolQuery(options *Options, args *[]string) int {
+	if len(*args) == 0 {
 		Error("expected a target to query")
 		return 1
 	}
 
 	dyndep_loader := NewDyndepLoader(this.State_, &this.DiskInterface, nil)
 
-	for i := 0; i < len(args); i++ {
+	for i := 0; i < len(*args); i++ {
 		err := ""
-		node := this.CollectTarget(args[i], &err)
+		node := this.CollectTarget((*args)[i], &err)
 		if node == nil {
 			Error("%s", err)
 			return 1
@@ -1272,17 +1277,17 @@ func PrintOneCompdbObject(directory string, edge *Edge, eval_mode EvaluateComman
 	PrintJSONString(edge.outputs_[0].path())
 	fmt.Printf("\"\n  }")
 }
-func (this *NinjaMain) ToolCompilationDatabase(options *Options, args []string) int {
+func (this *NinjaMain) ToolCompilationDatabase(options *Options, args *[]string) int {
 	// The compdb tool uses getopt, and expects argv[0] to contain the name of
 	// the tool, i.e. "compdb".
 
 	eval_mode := ECM_NORMAL
 
-	optind = 1
-	opts, _, err := getopt.Getopts(os.Args, "hx")
+	opts, optind, err := getopt.Getopts(*args, "hx")
 	if err != nil {
 		panic(err)
 	}
+	*args = (*args)[optind:]
 	for _, optV := range opts {
 		opt := optV.Option
 		switch opt {
@@ -1307,15 +1312,15 @@ func (this *NinjaMain) ToolCompilationDatabase(options *Options, args []string) 
 		if len(edge.inputs_) == 0 {
 			continue
 		}
-		if len(args) == 0 {
+		if len(*args) == 0 {
 			if !first {
 				fmt.Print(',')
 			}
 			PrintOneCompdbObject(directory, edge, eval_mode)
 			first = false
 		} else {
-			for i := 0; i != len(args); i++ {
-				if edge.rule_.name() == args[i] {
+			for i := 0; i != len(*args); i++ {
+				if edge.rule_.name() == (*args)[i] {
 					if !first {
 						fmt.Print(',')
 					}
@@ -1330,7 +1335,7 @@ func (this *NinjaMain) ToolCompilationDatabase(options *Options, args []string) 
 	return 0
 }
 
-func (this *NinjaMain) ToolRecompact(options *Options, args []string) int {
+func (this *NinjaMain) ToolRecompact(options *Options, args *[]string) int {
 	if !this.EnsureBuildDirExists() {
 		return 1
 	}
@@ -1342,15 +1347,15 @@ func (this *NinjaMain) ToolRecompact(options *Options, args []string) int {
 	return 0
 }
 
-func (this *NinjaMain) ToolRestat(options *Options, args []string) int {
+func (this *NinjaMain) ToolRestat(options *Options, args *[]string) int {
 	// The restat tool uses getopt, and expects argv[0] to contain the name of the
 	// tool, i.e. "restat"
 
-	optind = 1
-	opts, _, err1 := getopt.Getopts(os.Args, "h")
+	opts, optind, err1 := getopt.Getopts(*args, "h")
 	if err1 != nil {
 		panic(err1)
 	}
+	*args = (*args)[optind:]
 	for _, optV := range opts {
 		opt := optV.Option
 		switch opt {
@@ -1386,7 +1391,7 @@ func (this *NinjaMain) ToolRestat(options *Options, args []string) int {
 		err = ""
 	}
 
-	success := this.BuildLog.Restat(log_path, &this.DiskInterface, args, &err)
+	success := this.BuildLog.Restat(log_path, &this.DiskInterface, *args, &err)
 	if !success {
 		Error("failed recompaction: %s", err)
 		return EXIT_FAILURE
@@ -1424,7 +1429,7 @@ func (this *NinjaMain) IsPathDead(s string) bool {
 	return mtime == 0
 }
 
-func (this *NinjaMain) ToolRules(options *Options, args []string) int {
+func (this *NinjaMain) ToolRules(options *Options, args *[]string) int {
 	// Parse options.
 
 	// The rules tool uses getopt, and expects argv[0] to contain the name of
@@ -1432,11 +1437,11 @@ func (this *NinjaMain) ToolRules(options *Options, args []string) int {
 
 	print_description := false
 
-	optind = 1
-	opts, _, err := getopt.Getopts(os.Args, "hd")
+	opts, optind, err := getopt.Getopts(*args, "hd")
 	if err != nil {
 		panic(err)
 	}
+	*args = (*args)[optind:]
 	for _, optV := range opts {
 		opt := optV.Option
 		switch opt {

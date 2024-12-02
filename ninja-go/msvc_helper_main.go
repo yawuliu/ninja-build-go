@@ -49,7 +49,7 @@ package ninja_go
 //  fclose(depfile);
 //}
 
-func MSVCHelperMain(args []string) int {
+func MSVCHelperMain(args *[]string) int {
 	//output_filename := ""
 	//envfile:= ""
 	//

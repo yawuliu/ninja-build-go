@@ -66,7 +66,7 @@ func (this *DepsLog) OpenForWrite(path string, err *string) bool {
 		}
 	}
 
-	if this.file_ == nil {
+	if this.file_ != nil {
 		panic("!this.file_")
 	}
 	this.file_path_ = path // we don't actually open the file right now, but will do

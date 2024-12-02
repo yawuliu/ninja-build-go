@@ -17,8 +17,9 @@ type OptionalExplanations struct { // explanations_
 
 func (this *OptionalExplanations) dummy() {}
 
-func NewOptionalExplanations(explanations Explanations) *OptionalExplanations {
+func NewOptionalExplanations() *OptionalExplanations { //explanations Explanations
 	ret := OptionalExplanations{}
+	ret.map_ = make(map[interface{}][]string)
 	// ret.explanations_ = explanations
 	return &ret
 }

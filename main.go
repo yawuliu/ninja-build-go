@@ -16,15 +16,15 @@ func TerminateHandler() {
 	fmt.Println("terminate handler called:", s)
 }
 
-func real_main() error {
+func real_main(args []string) error {
 	config := ninja_go.BuildConfig{}
 	options := ninja_go.Options{}
 	options.InputFile = "build.ninja"
 
 	// setvbuf(stdout, NULL, _IOLBF, BUFSIZ)
-	ninja_command := os.Args[0]
+	ninja_command := args[0]
 
-	exit_code := ninja_go.ReadFlags(os.Args, &options, &config)
+	exit_code := ninja_go.ReadFlags(&args, &options, &config)
 	if exit_code >= 0 {
 		os.Exit(exit_code)
 	}
@@ -50,7 +50,7 @@ func real_main() error {
 		// None of the RUN_AFTER_FLAGS actually use a NinjaMain, but it's needed
 		// by other tools.
 		// ninja := NewNinjaMain(ninja_command, &config)
-		os.Exit(options.Tool.Func1(&options, os.Args))
+		os.Exit(options.Tool.Func1(&options, &args))
 	}
 
 	// Limit number of rebuilds, to prevent infinite loops.
@@ -70,7 +70,7 @@ func real_main() error {
 		}
 
 		if options.Tool != nil && options.Tool.When == ninja_go.RUN_AFTER_LOAD {
-			os.Exit(options.Tool.Func1(&options, os.Args))
+			os.Exit(options.Tool.Func1(&options, &args))
 		}
 
 		if !ninja.EnsureBuildDirExists() {
@@ -82,7 +82,7 @@ func real_main() error {
 		}
 
 		if options.Tool != nil && options.Tool.When == ninja_go.RUN_AFTER_LOGS {
-			os.Exit(options.Tool.Func1(&options, os.Args))
+			os.Exit(options.Tool.Func1(&options, &args))
 		}
 
 		// Attempt to rebuild the manifest before building anything else
@@ -101,7 +101,7 @@ func real_main() error {
 
 		ninja.ParsePreviousElapsedTimes()
 
-		result := ninja.RunBuild(os.Args, status)
+		result := ninja.RunBuild(&args, status)
 		if ninja_go.GMetrics != nil {
 			ninja.DumpMetrics()
 		}
@@ -115,7 +115,7 @@ func real_main() error {
 
 func main() {
 	go TerminateHandler()
-	err := real_main()
+	err := real_main(os.Args)
 	if err != nil {
 		log.Println(err)
 		os.Exit(2)

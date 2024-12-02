@@ -37,7 +37,7 @@ func (this *Plan) AddTarget(target *Node, err *string) bool {
 func (this *Plan) AddSubTarget(node *Node, dependent *Node, err *string, dyndep_walk map[*Edge]bool) bool {
 	edge := node.in_edge()
 	if edge == nil {
-		if node.dirty_ && !node.generated_by_dep_loader_ {
+		if node.dirty() && !node.generated_by_dep_loader() {
 			referenced := ""
 			if dependent != nil {
 				referenced = ", needed by '" + dependent.path_ + "',"
@@ -61,7 +61,7 @@ func (this *Plan) AddSubTarget(node *Node, dependent *Node, err *string, dyndep_
 		return false // 已经计划过的边不需要再次处理
 	}
 
-	if node.dirty_ && want == kWantNothing {
+	if node.dirty() && want == kWantNothing {
 		want = kWantToStart
 		this.want_[edge] = want
 		this.EdgeWanted(edge)

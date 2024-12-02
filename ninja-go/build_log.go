@@ -30,6 +30,7 @@ type BuildLogUser interface {
 
 func NewBuildLog() *BuildLog {
 	ret := BuildLog{}
+	ret.entries_ = make(Entries)
 	return &ret
 }
 func (this *BuildLog) ReleaseBuildLog() {
@@ -45,7 +46,7 @@ func (this *BuildLog) OpenForWrite(path string, user BuildLogUser, err *string) 
 		}
 	}
 
-	if this.log_file_ == nil {
+	if this.log_file_ != nil {
 		panic("!this.log_file_")
 	}
 	this.log_file_path_ = path // we don't actually open the file right now, but will

@@ -354,10 +354,11 @@ func NewDependencyScan(state *State, build_log *BuildLog, deps_log *DepsLog, dis
 // / state accordingly.
 // / Appends any validation nodes found to the nodes parameter.
 // / Returns false on failure.
-func (this *DependencyScan) RecomputeDirty(node *Node, validation_nodes []*Node, err *string) bool {
+func (this *DependencyScan) RecomputeDirty(initial_node *Node, validation_nodes []*Node, err *string) bool {
 	stack := []*Node{}
 	new_validation_nodes := []*Node{}
 	nodes := deque.NewDeque() //(1, initial_node);
+	nodes.PushBack(initial_node)
 
 	// RecomputeNodeDirty might return new validation nodes that need to be
 	// checked for dirty state, keep a queue of nodes to visit.
@@ -368,7 +369,7 @@ func (this *DependencyScan) RecomputeDirty(node *Node, validation_nodes []*Node,
 		stack = []*Node{}
 		new_validation_nodes = []*Node{}
 
-		if !this.RecomputeNodeDirty(node.(*Node), stack, new_validation_nodes, err) {
+		if !this.RecomputeNodeDirty(node.(*Node), &stack, &new_validation_nodes, err) {
 			return false
 		}
 		for _, i := range new_validation_nodes {
@@ -422,7 +423,8 @@ func (this *DependencyScan) LoadDyndeps1(node *Node, ddf DyndepFile, err *string
 	return this.dyndep_loader_.LoadDyndeps1(node, ddf, err)
 }
 
-func (this *DependencyScan) RecomputeNodeDirty(node *Node, stack []*Node, validation_nodes []*Node, err *string) bool {
+func (this *DependencyScan) RecomputeNodeDirty(node *Node,
+	stack *[]*Node, validation_nodes *[]*Node, err *string) bool {
 	edge := node.in_edge()
 	if edge == nil {
 		// If we already visited this leaf node then we are done.
@@ -453,7 +455,7 @@ func (this *DependencyScan) RecomputeNodeDirty(node *Node, stack []*Node, valida
 
 	// Mark the edge temporarily while in the call stack.
 	edge.mark_ = VisitInStack
-	stack = append(stack, node)
+	*stack = append(*stack, node)
 
 	dirty := false
 	edge.outputs_ready_ = true
@@ -511,7 +513,7 @@ func (this *DependencyScan) RecomputeNodeDirty(node *Node, stack []*Node, valida
 	// cycle detector if the validation node depends on this node.
 	// RecomputeDirty will add the validation nodes to the initial nodes
 	// and recurse into them.
-	validation_nodes = append(validation_nodes, edge.validations_...)
+	*validation_nodes = append(*validation_nodes, edge.validations_...)
 
 	// Visit all inputs; we're dirty if any of the inputs are dirty.
 	var most_recent_input *Node = nil
@@ -570,15 +572,15 @@ func (this *DependencyScan) RecomputeNodeDirty(node *Node, stack []*Node, valida
 	// Mark the edge as finished during this walk now that it will no longer
 	// be in the call stack.
 	edge.mark_ = VisitDone
-	if stack[len(stack)-1] == node {
-		panic("stack.back() == node")
+	if (*stack)[len(*stack)-1] != node {
+		panic("stack.back() != node")
 	}
-	stack = stack[0 : len(stack)-1]
+	*stack = (*stack)[0 : len(*stack)-1]
 
 	return true
 }
 
-func (this *DependencyScan) VerifyDAG(node *Node, stack []*Node, err *string) bool {
+func (this *DependencyScan) VerifyDAG(node *Node, stack *[]*Node, err *string) bool {
 	edge := node.in_edge()
 	if edge == nil {
 		*err = "assertion failed: edge is NULL"
@@ -591,22 +593,22 @@ func (this *DependencyScan) VerifyDAG(node *Node, stack []*Node, err *string) bo
 	}
 
 	// 查找调用栈中该边的起始位置
-	for i, n := range stack {
+	for i, n := range *stack {
 		if n.in_edge() == edge {
 			// 标记循环的开始为边的结束节点
-			stack[i] = node
+			(*stack)[i] = node
 			break
 		}
 	}
 
 	// 构建错误信息，拒绝循环
 	*err = "dependency cycle: "
-	for _, n := range stack {
-		*err += n.path_ + " -> "
+	for _, n := range *stack {
+		*err += n.path_ + " . "
 	}
-	*err += stack[len(stack)-1].path_
+	*err += (*stack)[len(*stack)-1].path_
 
-	if len(stack) == 1 && edge.maybe_phonycycle_diagnostic() {
+	if len(*stack) == 1 && edge.maybe_phonycycle_diagnostic() {
 		*err += " [-w phonycycle=err]"
 	}
 
@@ -633,7 +635,78 @@ func (this *DependencyScan) RecomputeOutputDirty(edge *Edge, most_recent_input *
 		}
 
 		// Phony edges are clean, nothing to do
+		return false
 	}
+
+	// Dirty if we're missing the output.
+	if !output.exists() {
+		this.explanations_.Record(output, "output %s doesn't exist",
+			output.path())
+		return true
+	}
+
+	var entry *LogEntry = nil
+
+	// If this is a restat rule, we may have cleaned the output in a
+	// previous run and stored the command start time in the build log.
+	// We don't want to consider a restat rule's outputs as dirty unless
+	// an input changed since the last run, so we'll skip checking the
+	// output file's actual mtime and simply check the recorded mtime from
+	// the log against the most recent input's mtime (see below)
+	used_restat := false
+	if edge.GetBindingBool("restat") && this.build_log() != nil {
+		entry = this.build_log().LookupByOutput(output.path())
+		if entry != nil {
+			used_restat = true
+		}
+	}
+
+	// Dirty if the output is older than the input.
+	if !used_restat && most_recent_input != nil && output.mtime() < most_recent_input.mtime() {
+		this.explanations_.Record(output,
+			"output %s older than most recent input %s (%d vs %d)",
+			output.path(),
+			most_recent_input.path(), output.mtime(),
+			most_recent_input.mtime())
+		return true
+	}
+
+	if this.build_log() != nil {
+		generator := edge.GetBindingBool("generator")
+
+		if entry != nil || func() bool {
+			entry = this.build_log().LookupByOutput(output.path())
+			return entry != nil
+		}() {
+			if !generator && HashCommand(command) != entry.command_hash {
+				// May also be dirty due to the command changing since the last build.
+				// But if this is a generator rule, the command changing does not make us
+				// dirty.
+				this.explanations_.Record(output, "command line changed for %s", output.path())
+				return true
+			}
+			if most_recent_input != nil && entry.mtime < most_recent_input.mtime() {
+				// May also be dirty due to the mtime in the log being older than the
+				// mtime of the most recent input.  This can occur even when the mtime
+				// on disk is newer if a previous run wrote to the output file but
+				// exited with an error or was interrupted. If this was a restat rule,
+				// then we only check the recorded mtime against the most recent input
+				// mtime and ignore the actual output's mtime above.
+				this.explanations_.Record(
+					output,
+					"recorded mtime of %s older than most recent input %s (%d vs %d)",
+					output.path(), most_recent_input.path(),
+					entry.mtime, most_recent_input.mtime())
+				return true
+			}
+		}
+		if entry == nil && !generator {
+			this.explanations_.Record(output, "command line not found in log for %s",
+				output.path())
+			return true
+		}
+	}
+
 	return false
 }
 

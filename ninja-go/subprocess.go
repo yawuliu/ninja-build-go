@@ -1,76 +1,121 @@
 package ninja_go
 
 import (
-	"fmt"
+	"log"
+	"os"
 	"os/exec"
-	"sync"
+	"runtime"
+	"strings"
 )
 
 type Subprocess struct {
-	cmd          *exec.Cmd
-	output       string
-	wg           sync.WaitGroup
-	use_console_ bool
+	cmd         *exec.Cmd
+	use_console bool
 }
 
-func (this *Subprocess) GetOutput() string {
-	return this.output
+func NewSubprocess(use_console bool) *Subprocess {
+	ret := Subprocess{}
+	ret.use_console = use_console
+	return &ret
 }
-
-func (this *Subprocess) Clear() {
-	//if pipe_ {
-	//	if !CloseHandle(pipe_) {
-	//		Win32Fatal("CloseHandle")
-	//	}
-	//}
-	//// Reap child if forgotten.
-	//if child_ {
-	//	this.Finish()
-	//}
-}
-
-// captureOutput captures the output of the subprocess.
-func (s *Subprocess) captureOutput() {
-	defer s.wg.Done()
-	out, err := s.cmd.CombinedOutput()
-	if err != nil {
-		s.output = fmt.Sprintf("Error: %v\nOutput: %s", err, out)
-	} else {
-		s.output = string(out)
-	}
-}
-
 func (this *Subprocess) Start(set *SubprocessSet, command string) bool {
-	this.wg.Add(1)
-	var err error
-	if this.use_console_ {
-		err = this.cmd.Start()
+	if this.use_console {
+		if runtime.GOOS == "windows" {
+			this.cmd = exec.Command("cmd", "/c", command)
+		} else {
+			this.cmd = exec.Command("bash", "-c", command)
+		}
 	} else {
-		err = this.cmd.Start()
-		if err == nil {
-			go this.captureOutput()
+		arr := strings.Split(command, " ")
+		if len(arr) > 1 {
+			this.cmd = exec.Command(arr[0], arr[1:]...)
+		} else {
+			this.cmd = exec.Command(arr[0])
 		}
 	}
+	err := this.cmd.Start()
 	if err != nil {
 		return false
 	}
 	return true
 }
-func (this *Subprocess) OnPipeReady() {}
+
+const CONTROL_C_EXIT = 0x00F00F00
+
+func (this *Subprocess) Finish() ExitStatus {
+	if this.cmd == nil {
+		return ExitFailure
+	}
+	if this.cmd.ProcessState == nil {
+		err := this.cmd.Wait()
+		if err != nil {
+			log.Fatalf("cmd.Wait: %v", err)
+		}
+	}
+	exit_code := this.cmd.ProcessState.ExitCode()
+	if exit_code == 0 {
+		return ExitSuccess
+	} else if exit_code == CONTROL_C_EXIT {
+		return ExitInterrupted
+	} else {
+		return ExitFailure
+	}
+}
+
+func (this *Subprocess) Done() bool {
+	return this.cmd.ProcessState.Exited()
+}
+
+func (this *Subprocess) GetOutput() string {
+	buf, _ := this.cmd.Output()
+	return string(buf)
+}
 
 type SubprocessSet struct {
 	running_  []*Subprocess
 	finished_ []*Subprocess // std::queue<Subprocess*>
 }
 
+// NewSubprocessSet creates a new SubprocessSet.
+func NewSubprocessSet() *SubprocessSet {
+	return &SubprocessSet{}
+}
+
+func (this *SubprocessSet) NotifyInterrupted(dwCtrlType int) bool {
+	for _, task := range this.running_ {
+		err := task.cmd.Process.Signal(os.Interrupt)
+		if err != nil {
+			log.Fatalln(err)
+			continue
+		}
+	}
+	return true
+}
+
 // Add adds a new subprocess to the set.
 func (this *SubprocessSet) Add(command string, useConsole bool) *Subprocess {
-	sub := NewSubprocess(command, useConsole)
-	if succ := sub.Start(this, command); !succ {
-		return nil
+	subprocess := NewSubprocess(useConsole)
+	if succ := subprocess.Start(this, command); succ {
+		this.running_ = append(this.running_, subprocess)
+	} else {
+		this.finished_ = append(this.finished_, subprocess)
 	}
-	this.running_ = append(this.running_, sub)
-	return sub
+	return subprocess
+}
+
+func (this *SubprocessSet) DoWork() bool {
+	if len(this.running_) == 0 {
+		return true
+	}
+	subproc := this.running_[0]
+	err := subproc.cmd.Wait()
+	succ := true
+	if err != nil {
+		succ = false
+	}
+	this.running_ = this.running_[1:]
+	this.finished_ = append(this.finished_, subproc)
+	return succ
 }
 
 // NextFinished returns the next finished subprocess.
@@ -78,25 +123,19 @@ func (s *SubprocessSet) NextFinished() *Subprocess {
 	if len(s.finished_) == 0 {
 		return nil
 	}
-	sub := s.finished_[0]
+	subproc := s.finished_[0]
 	s.finished_ = s.finished_[1:]
-	return sub
+	return subproc
 }
 
 // Clear clears the subprocess set.
 func (s *SubprocessSet) Clear() {
 	for _, sub := range s.running_ {
-		sub.cmd.Process.Kill()
-		sub.cmd.Wait()
-	}
-	s.running_ = nil
-}
-
-func removeSubprocess(slice []*Subprocess, sub *Subprocess) []*Subprocess {
-	for i, s := range slice {
-		if s == sub {
-			return append(slice[:i], slice[i+1:]...)
+		if sub.cmd.ProcessState == nil { //running
+			sub.cmd.Process.Signal(os.Interrupt)
+			//sub.cmd.Process.Kill()
+			sub.cmd.Wait()
 		}
 	}
-	return slice
+	s.running_ = nil
 }

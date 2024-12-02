@@ -17,6 +17,8 @@ func NewCleaner(state *State, config *BuildConfig, disk_interface DiskInterface)
 	ret := Cleaner{}
 	ret.state_ = state
 	ret.config_ = config
+	ret.removed_ = make(map[string]bool)
+	ret.cleaned_ = make(map[*Node]bool)
 	ret.dyndep_loader_ = NewDyndepLoader(state, disk_interface, nil)
 	ret.cleaned_files_count_ = 0
 	ret.disk_interface_ = disk_interface

@@ -68,7 +68,7 @@ type NinjaMain struct {
 	Config_ *BuildConfig
 
 	/// Loaded state (rules, nodes).
-	State_ State
+	State_ *State
 
 	/// Functions for accessing the disk.
 	DiskInterface RealDiskInterface
@@ -87,6 +87,7 @@ func NewNinjaMain(ninja_command string, config *BuildConfig) *NinjaMain {
 	ret.NinjaCommand = ninja_command
 	ret.Config_ = config
 	ret.StartTimeMillis = GetTimeMillis()
+	ret.State_ = NewState()
 	return &ret
 }
 
@@ -127,7 +128,7 @@ func (this *NinjaMain) RunBuild(args []string, status Status) int {
 
 	this.DiskInterface.AllowStatCache(g_experimental_statcache)
 
-	builder := NewBuilder(&this.State_, this.Config_, &this.BuildLog, &this.DepsLog, &this.DiskInterface, status, this.StartTimeMillis)
+	builder := NewBuilder(this.State_, this.Config_, &this.BuildLog, &this.DepsLog, &this.DiskInterface, status, this.StartTimeMillis)
 	for i := 0; i < len(targets); i++ {
 		if !builder.AddTarget2(targets[i], &err) {
 			if err != "" {
@@ -209,7 +210,7 @@ func (this *NinjaMain) OpenDepsLog(recompact_only bool) bool {
 	}
 
 	err := ""
-	status := this.DepsLog.Load(path, &this.State_, &err)
+	status := this.DepsLog.Load(path, this.State_, &err)
 	if status == LOAD_ERROR {
 		Error("loading deps log %s: %s", path, err)
 		return false
@@ -256,7 +257,7 @@ func (this *NinjaMain) RebuildManifest(input_file string, err *string, status St
 		return false
 	}
 
-	builder := NewBuilder(&this.State_, this.Config_, &this.BuildLog, &this.DepsLog, &this.DiskInterface, status, this.StartTimeMillis)
+	builder := NewBuilder(this.State_, this.Config_, &this.BuildLog, &this.DepsLog, &this.DiskInterface, status, this.StartTimeMillis)
 	if !builder.AddTarget2(node, err) {
 		return false
 	}
@@ -541,7 +542,7 @@ func UsageMain(config *BuildConfig) {
 }
 
 func (this *NinjaMain) ToolBrowse(options *Options, args []string) int {
-	RunBrowsePython(&this.State_, this.NinjaCommand, options.InputFile, args)
+	RunBrowsePython(this.State_, this.NinjaCommand, options.InputFile, args)
 	// If we get here, the browse failed.
 	return 1
 }
@@ -587,7 +588,7 @@ func (this *NinjaMain) ToolClean(options *Options, args []string) int {
 		return 1
 	}
 
-	cleaner := NewCleaner(&this.State_, this.Config_, &this.DiskInterface)
+	cleaner := NewCleaner(this.State_, this.Config_, &this.DiskInterface)
 	if len(args) >= 1 {
 		if clean_rules {
 			return cleaner.CleanRules(args)
@@ -600,7 +601,7 @@ func (this *NinjaMain) ToolClean(options *Options, args []string) int {
 }
 
 func (this *NinjaMain) ToolCleanDead(options *Options, args []string) int {
-	cleaner := NewCleaner(&this.State_, this.Config_, &this.DiskInterface)
+	cleaner := NewCleaner(this.State_, this.Config_, &this.DiskInterface)
 	return cleaner.CleanDead(this.BuildLog.entries())
 }
 
@@ -1063,7 +1064,7 @@ func (this *NinjaMain) ToolMissingDeps(options *Options, args []string) int {
 	}
 	disk_interface := RealDiskInterface{}
 	printer := MissingDependencyPrinter{}
-	scanner := NewMissingDependencyScanner(&printer, &this.DepsLog, &this.State_, &disk_interface)
+	scanner := NewMissingDependencyScanner(&printer, &this.DepsLog, this.State_, &disk_interface)
 	for _, it := range nodes {
 		scanner.ProcessNode(it)
 	}
@@ -1140,16 +1141,16 @@ func (this *NinjaMain) ToolTargets(options *Options, args []string) int {
 				rule = args[1]
 			}
 			if rule == "" {
-				return ToolTargetsSourceList(&this.State_)
+				return ToolTargetsSourceList(this.State_)
 			} else {
-				return ToolTargetsList2(&this.State_, rule)
+				return ToolTargetsList2(this.State_, rule)
 			}
 		} else if mode == "depth" {
 			if len(args) > 1 {
 				depth, _ = strconv.Atoi(args[1])
 			}
 		} else if mode == "all" {
-			return ToolTargetsList1(&this.State_)
+			return ToolTargetsList1(this.State_)
 		} else {
 			suggestion := SpellcheckString(mode, "rule", "depth", "all", "\000")
 			if suggestion != "" {
@@ -1192,7 +1193,7 @@ func (this *NinjaMain) ToolGraph(options *Options, args []string) int {
 		return 1
 	}
 
-	graph := NewGraphViz(&this.State_, &this.DiskInterface)
+	graph := NewGraphViz(this.State_, &this.DiskInterface)
 	graph.Start()
 	for _, n := range nodes {
 		graph.AddTarget(n)
@@ -1208,7 +1209,7 @@ func (this *NinjaMain) ToolQuery(options *Options, args []string) int {
 		return 1
 	}
 
-	dyndep_loader := NewDyndepLoader(&this.State_, &this.DiskInterface, nil)
+	dyndep_loader := NewDyndepLoader(this.State_, &this.DiskInterface, nil)
 
 	for i := 0; i < len(args); i++ {
 		err := ""

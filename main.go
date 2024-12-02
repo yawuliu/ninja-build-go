@@ -62,7 +62,7 @@ func real_main() error {
 		if options.PhonyCycleShouldErr {
 			parser_opts.PhonyCycleAction = ninja_go.KPhonyCycleActionError
 		}
-		parser := ninja_go.NewManifestParser(&ninja.State_, &ninja.DiskInterface, parser_opts)
+		parser := ninja_go.NewManifestParser(ninja.State_, &ninja.DiskInterface, parser_opts)
 		var err string
 		if !parser.Load(options.InputFile, &err, nil) {
 			status.Error("%s", err)

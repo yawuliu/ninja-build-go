@@ -9,6 +9,10 @@ type CLParser struct {
 	includes_ map[string]bool // std::set<std::string>
 }
 
+func NewCLParser() *CLParser {
+	return &CLParser{includes_: make(map[string]bool)}
+}
+
 // / Parse a line of cl.exe output and extract /showIncludes info.
 // / If a dependency is extracted, returns a nonempty string.
 // / Exposed for testing.
@@ -85,8 +89,8 @@ func (this *CLParser) Parse(output *string, deps_prefix string, filtered_output 
 	METRIC_RECORD("CLParser::Parse")
 
 	// Loop over all lines in the output to process them.
-	if output != filtered_output {
-		panic("&output != filtered_output")
+	if output == filtered_output {
+		panic("&output == filtered_output")
 	}
 	start := 0
 	seen_show_includes := false

@@ -229,7 +229,7 @@ func (this *RealDiskInterface) ReadFile(path string, contents, err *string) Stat
 		*err = err1.Error()
 		status = OtherError
 	} else {
-		*contents = string(buf)
+		*contents = string(buf) + "\x00"
 	}
 	return status
 }

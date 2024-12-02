@@ -7,7 +7,7 @@ type DyndepParser struct {
 	lexer_       Lexer
 	//
 	dyndep_file_ DyndepFile
-	env_         BindingEnv
+	env_         *BindingEnv
 }
 
 func (this *DyndepParser) NewParser(state *State, file_reader FileReader) {
@@ -65,7 +65,7 @@ func (this *DyndepParser) Parse(filename string, input string, err *string) bool
 			}
 			return true
 		case NEWLINE:
-			return false
+			// return false
 		default:
 			return this.lexer_.Error(string("unexpected ")+TokenName(token), err)
 		}
@@ -82,7 +82,7 @@ func (this *DyndepParser) ParseDyndepVersion(err *string) bool {
 	if name != "ninja_dyndep_version" {
 		return this.lexer_.Error("expected 'ninja_dyndep_version = ...'", err)
 	}
-	version := let_value.Evaluate(&this.env_)
+	version := let_value.Evaluate(this.env_)
 	major := 0
 	minor := 0
 	ParseVersion(version, &major, &minor)
@@ -110,7 +110,7 @@ func (this *DyndepParser) ParseEdge(err *string) bool {
 			return this.lexer_.Error("expected path", err)
 		}
 
-		path := out0.Evaluate(&this.env_)
+		path := out0.Evaluate(this.env_)
 		if path == "" {
 			return this.lexer_.Error("empty path", err)
 		}
@@ -208,12 +208,12 @@ func (this *DyndepParser) ParseEdge(err *string) bool {
 		if key != "restat" {
 			return this.lexer_.Error("binding is not 'restat'", err)
 		}
-		value := val.Evaluate(&this.env_)
+		value := val.Evaluate(this.env_)
 		dyndeps.restat_ = value != ""
 	}
 
 	for _, in := range ins {
-		path := in.Evaluate(&this.env_)
+		path := in.Evaluate(this.env_)
 		if path == "" {
 			return this.lexer_.Error("empty path", err)
 		}
@@ -224,7 +224,7 @@ func (this *DyndepParser) ParseEdge(err *string) bool {
 	}
 
 	for _, out := range outs {
-		path := out.Evaluate(&this.env_)
+		path := out.Evaluate(this.env_)
 		if path == "" {
 			return this.lexer_.Error("empty path", err)
 		}

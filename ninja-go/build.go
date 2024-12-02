@@ -288,8 +288,8 @@ func (this *Builder) AlreadyUpToDate() bool {
 // / Run the build.  Returns false on error.
 // / It is an error to call this function when AlreadyUpToDate() is true.
 func (this *Builder) Build(err *string) bool {
-	if !this.AlreadyUpToDate() {
-		panic("!AlreadyUpToDate() ")
+	if this.AlreadyUpToDate() {
+		panic("AlreadyUpToDate() ")
 	}
 	this.plan_.PrepareQueue()
 
@@ -569,7 +569,7 @@ func (this *Builder) FinishCommand(result *Result, err *string) bool {
 	}
 
 	if deps_type != "" && !this.config_.DryRun {
-		if len(edge.outputs_) != 0 {
+		if len(edge.outputs_) == 0 {
 			panic("should have been rejected by parser")
 		}
 		for _, o := range edge.outputs_ {
@@ -593,7 +593,7 @@ func (this *Builder) SetBuildLog(log *BuildLog) {
 
 func (this *Builder) ExtractDeps(result *Result, deps_type string, deps_prefix string, deps_nodes []*Node, err *string) bool {
 	if deps_type == "msvc" {
-		parser := CLParser{}
+		parser := NewCLParser()
 		output := ""
 		if !parser.Parse(&result.output, deps_prefix, &output, err) {
 			return false

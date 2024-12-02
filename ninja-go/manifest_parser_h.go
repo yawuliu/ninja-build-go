@@ -52,7 +52,7 @@ func NewManifestParser(state *State, file_reader FileReader, options *ManifestPa
 	ret.NewParser(state, file_reader)
 	ret.options_ = options
 	ret.quiet_ = false
-	ret.env_ = &state.bindings_
+	ret.env_ = state.bindings_
 	return &ret
 }
 
@@ -116,7 +116,7 @@ func (this *ManifestParser) Parse(filename, input string, err *string) bool {
 		case TEOF:
 			return true
 		case NEWLINE:
-			return false
+			// break
 		default:
 			return this.lexer_.Error(string("unexpected ")+TokenName(token), err)
 		}
@@ -197,13 +197,14 @@ func (this *ManifestParser) ParseRule(err *string) bool {
 			return this.lexer_.Error("unexpected variable '"+key+"'", err)
 		}
 	}
-
-	if rule.bindings_["rspfile"].empty() != rule.bindings_["rspfile_content"].empty() {
+	_, ok := rule.bindings_["rspfile"]
+	_, ok1 := rule.bindings_["rspfile_content"]
+	if ok != ok1 {
 		return this.lexer_.Error("rspfile and rspfile_content need to be "+
 			"both specified", err)
 	}
 
-	if rule.bindings_["command"].empty() {
+	if _, ok := rule.bindings_["command"]; !ok {
 		return this.lexer_.Error("expected 'command =' line", err)
 	}
 

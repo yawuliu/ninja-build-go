@@ -35,6 +35,13 @@ type Rule struct {
 	bindings_ Bindings
 }
 
+func NewRule(name string) *Rule {
+	ret := Rule{}
+	ret.name_ = name
+	ret.bindings_ = make(Bindings)
+	return &ret
+}
+
 type BindingEnv struct {
 	Env
 	bindings_ map[string]string
@@ -44,10 +51,14 @@ type BindingEnv struct {
 
 func NewBindingEnv() *BindingEnv {
 	ret := BindingEnv{}
+	ret.bindings_ = map[string]string{}
+	ret.rules_ = map[string]*Rule{}
 	return &ret
 }
 func NewBindingEnvWithParent(parent *BindingEnv) *BindingEnv {
 	ret := BindingEnv{}
+	ret.bindings_ = map[string]string{}
+	ret.rules_ = map[string]*Rule{}
 	ret.parent_ = parent
 	return &ret
 }
@@ -67,8 +78,8 @@ func (this *BindingEnv) LookupVariable(var1 string) string {
 }
 
 func (this *BindingEnv) AddRule(rule *Rule) {
-	if this.LookupRuleCurrentScope(rule.name()) == nil {
-		panic("this.LookupRuleCurrentScope(rule.name()) == nil")
+	if this.LookupRuleCurrentScope(rule.name()) != nil {
+		panic("this.LookupRuleCurrentScope(rule.name()) != nil")
 	}
 	this.rules_[rule.name()] = rule
 }
@@ -120,12 +131,6 @@ func (this *BindingEnv) LookupWithFallback(var1 string, eval *EvalString, env En
 	}
 
 	return ""
-}
-
-func NewRule(name string) *Rule {
-	ret := Rule{}
-	ret.name_ = name
-	return &ret
 }
 
 func (this *Rule) name() string {

@@ -330,7 +330,7 @@ func (this *Plan) ScheduleInitialEdges() {
 func (this *Plan) NodeFinished(node *Node, err *string) bool {
 	// If this node provides dyndep info, load it now.
 	if node.dyndep_pending() {
-		if this.builder_ != nil {
+		if this.builder_ == nil {
 			panic("dyndep requires Plan to have a Builder")
 		}
 		// Load the now-clean dyndep file.  This will also update the
@@ -481,7 +481,7 @@ func (this *Plan) RefreshDyndepDependents(scan *DependencyScan, node *Node, err 
 		// build it if the outputs were not known to be dirty.  With dyndep
 		// information an output is now known to be dirty, so we want the edge.
 		edge := n.in_edge()
-		if edge != nil && !edge.outputs_ready() {
+		if edge == nil || !edge.outputs_ready() {
 			panic("edge && !edge.outputs_ready()")
 		}
 		want_e_second, ok := this.want_[edge]

@@ -54,8 +54,8 @@ func (this *Pool) EdgeFinished(edge *Edge) {
 
 // / adds the given edge to this Pool to be delayed.
 func (this *Pool) DelayEdge(edge *Edge) {
-	if this.depth_ != 0 {
-		panic("this.depth_ != 0")
+	if this.depth_ == 0 {
+		panic("this.depth_ == 0")
 	}
 	if !slices.Contains(this.delayed_, edge) {
 		this.delayed_ = append(this.delayed_, edge)
@@ -97,12 +97,15 @@ type State struct {
 	/// All the edges of the graph.
 	edges_ []*Edge
 
-	bindings_ BindingEnv
+	bindings_ *BindingEnv
 	defaults_ []*Node
 }
 
 func NewState() *State {
 	ret := State{}
+	ret.paths_ = make(map[string]*Node)
+	ret.pools_ = make(map[string]*Pool)
+	ret.bindings_ = NewBindingEnv()
 	ret.bindings_.AddRule(kPhonyRule)
 	ret.AddPool(kDefaultPool)
 	ret.AddPool(kConsolePool)
@@ -110,7 +113,7 @@ func NewState() *State {
 }
 
 func (this *State) AddPool(pool *Pool) {
-	if this.LookupPool(pool.name()) == nil {
+	if this.LookupPool(pool.name()) != nil {
 		panic("AddPool")
 	}
 	this.pools_[pool.name()] = pool
@@ -128,7 +131,7 @@ func (this *State) AddEdge(rule *Rule) *Edge {
 	edge := NewEdge()
 	edge.rule_ = rule
 	edge.pool_ = kDefaultPool
-	edge.env_ = &this.bindings_
+	edge.env_ = this.bindings_
 	edge.id_ = len(this.edges_)
 	this.edges_ = append(this.edges_, edge)
 	return edge

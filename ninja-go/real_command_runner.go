@@ -10,6 +10,7 @@ type RealCommandRunner struct {
 func NewRealCommandRunner(config *BuildConfig) *RealCommandRunner {
 	ret := RealCommandRunner{}
 	ret.config_ = config
+	ret.subproc_to_edge_ = make(map[*Subprocess]*Edge)
 	return &ret
 }
 func (this *RealCommandRunner) CanRunMore() int64 {
@@ -48,10 +49,10 @@ func (this *RealCommandRunner) StartCommand(edge *Edge) bool {
 }
 
 func (this *RealCommandRunner) WaitForCommand(result *Result) bool {
-	var subproc *Subprocess
+	var subproc *Subprocess = nil
 	for {
 		subproc = this.subprocs_.NextFinished()
-		if subproc == nil {
+		if subproc != nil {
 			break
 		}
 		interrupted := this.subprocs_.DoWork()

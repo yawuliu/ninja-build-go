@@ -17,19 +17,19 @@ func TerminateHandler() {
 }
 
 func real_main(args []string) error {
-	config := ninja_go.BuildConfig{}
+	config := ninja_go.NewBuildConfig()
 	options := ninja_go.Options{}
 	options.InputFile = "build.ninja"
 
 	// setvbuf(stdout, NULL, _IOLBF, BUFSIZ)
 	ninja_command := args[0]
 
-	exit_code := ninja_go.ReadFlags(&args, &options, &config)
+	exit_code := ninja_go.ReadFlags(&args, &options, config)
 	if exit_code >= 0 {
 		os.Exit(exit_code)
 	}
 
-	status := ninja_go.Statusfactory(&config)
+	status := ninja_go.Statusfactory(config)
 
 	if options.WorkingDir != "" {
 		// The formatting of this string, complete with funny quotes, is
@@ -56,7 +56,7 @@ func real_main(args []string) error {
 	// Limit number of rebuilds, to prevent infinite loops.
 	kCycleLimit := 100
 	for cycle := 1; cycle <= kCycleLimit; cycle++ {
-		ninja := ninja_go.NewNinjaMain(ninja_command, &config)
+		ninja := ninja_go.NewNinjaMain(ninja_command, config)
 
 		parser_opts := ninja_go.NewManifestParserOptions()
 		if options.PhonyCycleShouldErr {

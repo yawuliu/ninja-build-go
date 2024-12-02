@@ -1,6 +1,9 @@
 package ninja_go
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/ahrtr/gocontainer/queue/priorityqueue"
+)
 
 type Plan struct {
 	/// Keep track of which edges we want to build in this plan.  If this map does
@@ -23,7 +26,9 @@ type Plan struct {
 }
 
 func NewPlan(builder *Builder) *Plan {
-	return &Plan{builder_: builder, want_: make(map[*Edge]Want)}
+	ret := &Plan{builder_: builder, want_: make(map[*Edge]Want),
+		ready_: priorityqueue.New().WithComparator(&EdgeCmp{})}
+	return ret
 }
 
 // / Add a target to our plan (including all its dependencies).
@@ -259,7 +264,7 @@ func (this *Plan) ComputeCriticalPath() {
 	//    i.e. the edges producing its inputs, in the list.
 	//
 
-	topo_sort := TopoSort{}
+	topo_sort := TopoSort{visited_set_: make(map[*Edge]bool)}
 	for _, target := range this.targets_ {
 		topo_sort.VisitTarget(target)
 	}
@@ -296,7 +301,7 @@ func (this *Plan) ComputeCriticalPath() {
 // Must be called after ComputeCriticalPath and before FindWork
 func (this *Plan) ScheduleInitialEdges() {
 	// Add ready edges to queue.
-	if this.ready_.IsEmpty() {
+	if !this.ready_.IsEmpty() {
 		panic("ready_.empty()")
 	}
 	pools := map[*Pool]bool{} // std::set<*>

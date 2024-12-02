@@ -52,6 +52,21 @@ type Edge struct {
 	prev_elapsed_time_millis int64
 }
 
+type EdgeCmp struct {
+}
+
+// Compare returns reverse order
+func (this *EdgeCmp) Compare(a1, b1 interface{}) (int, error) {
+	a, b := a1.(*Edge), b1.(*Edge)
+	if a.id_ < b.id_ {
+		return 1, nil
+	}
+	if a.id_ > b.id_ {
+		return -1, nil
+	}
+	return 0, nil
+}
+
 type ExistenceStatus int8
 
 const (

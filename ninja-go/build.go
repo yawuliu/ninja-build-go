@@ -182,6 +182,7 @@ func NewBuilder(state *State, config *BuildConfig, build_log *BuildLog,
 	ret.status_ = status
 	ret.start_time_millis_ = start_time_millis
 	ret.disk_interface_ = disk_interface
+	ret.running_edges_ = make(map[*Edge]int)
 	if g_explaining {
 		ret.explanations_ = NewOptionalExplanations()
 	} else {

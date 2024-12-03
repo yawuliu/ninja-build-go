@@ -8,10 +8,6 @@ import (
 	"syscall"
 )
 
-func AreLongPathsEnabled() bool {
-	return false
-}
-
 func (this *RealDiskInterface) Stat(path string, err1 *string) TimeStamp {
 	METRIC_RECORD("node stat")
 	var st syscall.Stat_t

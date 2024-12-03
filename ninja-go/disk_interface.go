@@ -3,15 +3,10 @@ package ninja_go
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
-	"syscall"
-	"time"
 	"unicode"
 )
 
@@ -93,54 +88,6 @@ func NewRealDiskInterface() *RealDiskInterface {
 	return &ret
 }
 func (this *RealDiskInterface) ReleaseRealDiskInterface() {}
-
-// TimeStampFromFileTime 将 FILETIME 结构转换为 Unix 时间戳
-func TimeStampFromFileTime(filetime time.Time) TimeStamp {
-	ft := syscall.NsecToFiletime(filetime.UnixNano())
-	// FILETIME is in 100-nanosecond increments since the Windows epoch.
-	// We don't much care about epoch correctness but we do want the
-	// resulting value to fit in a 64-bit integer.
-	mtime := (uint64(ft.HighDateTime) << 32) | (uint64(ft.LowDateTime))
-	// 1600 epoch -> 2000 epoch (subtract 400 years).
-	return TimeStamp(mtime - uint64(12622770400)*uint64(1000000000/100))
-}
-
-func StatSingleFile(path string, err *string) TimeStamp {
-	fileInfo, err1 := os.Stat(path)
-	if err1 != nil {
-		if os.IsNotExist(err1) || os.IsPermission(err1) {
-			return 0 // 对应于 C++ 中的 ERROR_FILE_NOT_FOUND 或 ERROR_PATH_NOT_FOUND
-		}
-		*err = fmt.Errorf("GetFileAttributesEx(%s): %v", path, err1).Error()
-		return -1
-	}
-	return TimeStampFromFileTime(fileInfo.ModTime())
-}
-
-// StatAllFilesInDir 遍历目录中的所有文件，并填充时间戳映射
-func StatAllFilesInDir(dir string, stamps *DirCache, err1 *string) bool {
-	_, err := os.Stat(dir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return true // 对应于 C++ 中的 ERROR_FILE_NOT_FOUND 或 ERROR_PATH_NOT_FOUND
-		} // || os.IsPermission(err)
-		*err1 = fmt.Errorf("ReadDir(%s): %w", dir, err).Error()
-		return false
-	}
-	err = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil { // We also do not want files we cannot access.
-			fmt.Printf("Could not access %q: %v\n", path, err)
-			return nil
-		}
-		lowerName := strings.ToLower(info.Name())
-		(*stamps)[lowerName] = TimeStampFromFileTime(info.ModTime())
-		return nil
-	})
-	if err != nil {
-		log.Printf("walk error [%v]\n", err)
-	}
-	return true
-}
 
 // toLowerRune 将 rune 转换为小写
 func toLowerRune(r rune) rune {

@@ -48,8 +48,8 @@ func (this *Subprocess) Start(set *SubprocessSet, command string) bool {
 	//	log.Fatalln(err)
 	//	return false
 	//}
-	//this.cmd.Stdout = os.Stdout
-	//this.cmd.Stderr = os.Stderr
+	// this.cmd.Stdout = os.Stdout
+	this.cmd.Stderr = os.Stderr
 	//this.cmd.Env = os.Environ()
 	err := this.cmd.Start()
 	if err != nil {

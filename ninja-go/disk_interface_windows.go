@@ -131,15 +131,20 @@ func StatAllFilesInDir(dir string, stamps *DirCache, err1 *string) bool {
 		*err1 = fmt.Errorf("ReadDir(%s): %w", dir, err).Error()
 		return false
 	}
-	err = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil { // We also do not want files we cannot access.
-			fmt.Printf("Could not access %q: %v\n", path, err)
-			return nil
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		*err1 = fmt.Errorf("ReadDir(%s): %w", dir, err).Error()
+		return false
+	}
+	for _, file := range files {
+		info, err := file.Info()
+		if err != nil {
+			*err1 = fmt.Errorf("Stat(%s): %w", dir, err).Error()
+			return false
 		}
 		lowerName := strings.ToLower(info.Name())
 		(*stamps)[lowerName] = TimeStampFromFileTime(info.ModTime())
-		return nil
-	})
+	}
 	if err != nil {
 		log.Printf("walk error [%v]\n", err)
 	}

@@ -57,9 +57,10 @@ func CanonicalizePath(path *string, slash_bits *uint64) {
 
 	// 如果需要，这里可以进一步处理路径，例如转换所有分隔符为一个特定的字符
 	// 但在Go中，这通常不是必需的，因为filepath.Clean已经处理了路径分隔符
+	unixifiedPath := filepath.ToSlash(cleanPath)
 
 	// 更新传入的路径指针
-	*path = cleanPath
+	*path = unixifiedPath
 }
 
 func Error(msg string, ap ...interface{}) {
@@ -131,7 +132,7 @@ func StringNeedsWin32Escaping(input string) bool {
 // GetWin32EscapedString 转义字符串以在Windows命令行中使用
 func GetWin32EscapedString(input string, result1 *string) {
 	if !StringNeedsWin32Escaping(input) {
-		*result1 = input
+		*result1 += input
 		return
 	}
 
@@ -159,7 +160,7 @@ func GetWin32EscapedString(input string, result1 *string) {
 	result.WriteString(input[spanBegin:])
 	result.WriteString(strings.Repeat(string(kBackslash), consecutiveBackslashCount))
 	result.WriteRune(kQuote)
-	*result1 = result.String()
+	*result1 += result.String()
 }
 
 // GetLoadAverage 获取系统负载平均值

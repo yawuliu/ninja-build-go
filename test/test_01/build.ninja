@@ -6,7 +6,12 @@ rule cc
 
 build main.o: cc main.c
 
+build subdir/a.o: cc subdir/a.c
+
+build subdir/subdir1/a.o: cc subdir/subdir1/a.c
+
 rule link
+  description = Linking $in
   command = $cc $cflags $in -o $out
 
-build demo.exe: link main.o
+build demo.exe: link main.o subdir/a.o subdir/subdir1/a.o

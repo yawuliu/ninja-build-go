@@ -53,26 +53,25 @@ func rapid_read32(p []byte) uint32 {
 }
 
 // rapid_readSmall 读取并组合 3 个字节的输入
-func rapid_readSmall(p []byte, k int) uint64 {
+func rapid_readSmall(p []byte, k uint64) uint64 {
 	return uint64(p[0])<<56 | uint64(p[k>>1])<<32 | uint64(p[k-1])
 }
 
 var RAPIDHASH_UNROLLED = false
 
 // rapidhash_internal 是 rapidhash 的主要函数
-func rapidhash_internal(key []byte, len int, seed uint64, secret [3]uint64) uint64 {
-	p := key
-	seed ^= rapid_mix(seed^secret[0], secret[1]) ^ uint64(len)
+func rapidhash_internal(key []byte, len uint64, seed uint64, secret [3]uint64) uint64 {
+	p := uint64(0)
+	seed ^= rapid_mix(seed^secret[0], secret[1]) ^ len
 	var a, b uint64
-
 	if len <= 16 {
 		if len >= 4 {
-			plast := p[len-4:]
-			a = uint64((binary.LittleEndian.Uint32(p) << 32) | binary.LittleEndian.Uint32(plast))
+			plast := p + len - 4
+			a = uint64((rapid_read32(key[p:]) << 32) | rapid_read32(key[plast:]))
 			delta := uint64((len & 24) >> (len >> 3))
-			b = uint64((binary.LittleEndian.Uint32(p[delta:]) << 32) | binary.LittleEndian.Uint32(plast[-delta:]))
+			b = uint64((rapid_read32(key[p+delta:]) << 32) | rapid_read32(key[plast-delta:]))
 		} else if len > 0 {
-			a = rapid_readSmall(p, len)
+			a = rapid_readSmall(key[p:], len)
 			b = 0
 		} else {
 			a = 0
@@ -83,58 +82,59 @@ func rapidhash_internal(key []byte, len int, seed uint64, secret [3]uint64) uint
 		if i > 48 {
 			see1 := seed
 			see2 := seed
-
-			// 假设 RAPIDHASH_UNROLLED 是预定义的
 			if RAPIDHASH_UNROLLED {
 				for i >= 96 {
-					seed = rapid_mix(binary.LittleEndian.Uint64(p)^secret[0], binary.LittleEndian.Uint64(p[8:])^seed)
-					see1 = rapid_mix(binary.LittleEndian.Uint64(p[16:])^secret[1], binary.LittleEndian.Uint64(p[24:])^see1)
-					see2 = rapid_mix(binary.LittleEndian.Uint64(p[32:])^secret[2], binary.LittleEndian.Uint64(p[40:])^see2)
-					seed = rapid_mix(binary.LittleEndian.Uint64(p[48:])^secret[0], binary.LittleEndian.Uint64(p[56:])^seed)
-					see1 = rapid_mix(binary.LittleEndian.Uint64(p[64:])^secret[1], binary.LittleEndian.Uint64(p[72:])^see1)
-					see2 = rapid_mix(binary.LittleEndian.Uint64(p[80:])^secret[2], binary.LittleEndian.Uint64(p[88:])^see2)
-					p = p[96:]
+					seed = rapid_mix(rapid_read64(key[p:])^secret[0], rapid_read64(key[p+8:])^seed)
+					see1 = rapid_mix(rapid_read64(key[p+16:])^secret[1], rapid_read64(key[p+24:])^see1)
+					see2 = rapid_mix(rapid_read64(key[p+32:])^secret[2], rapid_read64(key[p+40:])^see2)
+					seed = rapid_mix(rapid_read64(key[p+48:])^secret[0], rapid_read64(key[p+56:])^seed)
+					see1 = rapid_mix(rapid_read64(key[p+64:])^secret[1], rapid_read64(key[p+72:])^see1)
+					see2 = rapid_mix(rapid_read64(key[p+80:])^secret[2], rapid_read64(key[p+88:])^see2)
+					p += 96
 					i -= 96
 				}
 				if i >= 48 {
-					seed = rapid_mix(binary.LittleEndian.Uint64(p)^secret[0], binary.LittleEndian.Uint64(p[8:])^seed)
-					see1 = rapid_mix(binary.LittleEndian.Uint64(p[16:])^secret[1], binary.LittleEndian.Uint64(p[24:])^see1)
-					see2 = rapid_mix(binary.LittleEndian.Uint64(p[32:])^secret[2], binary.LittleEndian.Uint64(p[40:])^see2)
-					p = p[48:]
+					seed = rapid_mix(rapid_read64(key[p:])^secret[0], rapid_read64(key[p+8:])^seed)
+					see1 = rapid_mix(rapid_read64(key[p+16:])^secret[1], rapid_read64(key[p+24:])^see1)
+					see2 = rapid_mix(rapid_read64(key[p+32:])^secret[2], rapid_read64(key[p+40:])^see2)
+					p += 48
 					i -= 48
 				}
 			} else {
-				for i >= 48 {
-					seed = rapid_mix(binary.LittleEndian.Uint64(p)^secret[0], binary.LittleEndian.Uint64(p[8:])^seed)
-					see1 = rapid_mix(binary.LittleEndian.Uint64(p[16:])^secret[1], binary.LittleEndian.Uint64(p[24:])^see1)
-					see2 = rapid_mix(binary.LittleEndian.Uint64(p[32:])^secret[2], binary.LittleEndian.Uint64(p[40:])^see2)
-					p = p[48:]
+				for {
+					seed = rapid_mix(rapid_read64(key[p:])^secret[0], rapid_read64(key[p+8:])^seed)
+					see1 = rapid_mix(rapid_read64(key[p+16:])^secret[1], rapid_read64(key[p+24:])^see1)
+					see2 = rapid_mix(rapid_read64(key[p+32:])^secret[2], rapid_read64(key[p+40:])^see2)
+					p += 48
 					i -= 48
+					if i < 48 {
+						break
+					}
 				}
 			}
 			seed ^= see1 ^ see2
 		}
 		if i > 16 {
-			seed = rapid_mix(binary.LittleEndian.Uint64(p)^secret[2], binary.LittleEndian.Uint64(p[8:])^seed^secret[1])
+			seed = rapid_mix(rapid_read64(key[p:])^secret[2], rapid_read64(key[p+8:])^seed^secret[1])
 			if i > 32 {
-				seed = rapid_mix(binary.LittleEndian.Uint64(p[16:])^secret[2], binary.LittleEndian.Uint64(p[24:])^seed)
+				seed = rapid_mix(rapid_read64(key[p+16:])^secret[2], rapid_read64(key[p+24:])^seed)
 			}
 		}
-		a = binary.LittleEndian.Uint64(p[len-16:])
-		b = binary.LittleEndian.Uint64(p[len-8:])
+		a = rapid_read64(key[p+i-16:])
+		b = rapid_read64(key[p+i-8:])
 	}
 	a ^= secret[1]
 	b ^= seed
 	rapid_mum(&a, &b)
-	return rapid_mix(a^secret[0]^uint64(len), b^secret[1])
+	return rapid_mix(a^secret[0]^len, b^secret[1])
 }
 
 // rapidhash_withSeed 是使用提供的种子的 rapidhash 函数
-func rapidhash_withSeed(key []byte, len int, seed uint64) uint64 {
+func rapidhash_withSeed(key []byte, len uint64, seed uint64) uint64 {
 	return rapidhash_internal(key, len, seed, rapid_secret)
 }
 
 // rapidhash 是默认的 rapidhash 函数
-func rapidhash(key []byte, len int) uint64 {
+func rapidhash(key []byte, len uint64) uint64 {
 	return rapidhash_withSeed(key, len, RAPID_SEED)
 }

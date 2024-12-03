@@ -315,7 +315,7 @@ func (this *Plan) ScheduleInitialEdges() {
 				pool.DelayEdge(edge)
 				pools[pool] = true
 			} else {
-				this.ScheduleWork(this.want_)
+				this.ScheduleWork(this.want_, edge)
 			}
 		}
 	}
@@ -351,23 +351,23 @@ func (this *Plan) NodeFinished(node *Node, err *string) bool {
 		}
 
 		// See if the edge is now ready.
-		if !this.EdgeMaybeReady(this.want_, err) {
+		if !this.EdgeMaybeReady(this.want_, oe, err) {
 			return false
 		}
 	}
 	return true
 }
 
-func (this *Plan) EdgeMaybeReady(want_e map[*Edge]Want, err *string) bool {
-	for edge, want := range want_e {
-		if edge.AllInputsReady() {
-			if want != kWantNothing {
-				this.ScheduleWork(want_e)
-			} else {
-				// 我们不需要构建这个边，但可能需要构建它的依赖之一
-				if !this.EdgeFinished(edge, kEdgeSucceeded, err) {
-					return false
-				}
+func (this *Plan) EdgeMaybeReady(want_e map[*Edge]Want, want_e_first *Edge, err *string) bool {
+	edge := want_e_first
+	want_e_second := want_e[want_e_first]
+	if edge.AllInputsReady() {
+		if want_e_second != kWantNothing {
+			this.ScheduleWork(want_e, edge)
+		} else {
+			// 我们不需要构建这个边，但可能需要构建它的依赖之一
+			if !this.EdgeFinished(edge, kEdgeSucceeded, err) {
+				return false
 			}
 		}
 	}
@@ -377,27 +377,27 @@ func (this *Plan) EdgeMaybeReady(want_e map[*Edge]Want, err *string) bool {
 // / Submits a ready edge as a candidate for execution.
 // / The edge may be delayed from running, for example if it's a member of a
 // / currently-full pool.
-func (this *Plan) ScheduleWork(want_e map[*Edge]Want) {
-	for edge, want := range want_e {
-		if want == kWantToFinish {
-			// 这条边已经被调度过了。如果一个边和它的依赖共享一个顺序输入，
-			// 或者一个节点重复了一个输出边（见 https://github.com/ninja-build/ninja/pull/519），
-			// 我们可能会再次来到这里。避免再次调度工作。
-			continue
-		}
-		if want != kWantToStart {
-			panic("unexpected want state")
-		}
-		want_e[edge] = kWantToFinish
+func (this *Plan) ScheduleWork(want_e map[*Edge]Want, want_e_first *Edge) {
+	want_e_second := want_e[want_e_first]
+	if want_e_second == kWantToFinish {
+		// 这条边已经被调度过了。如果一个边和它的依赖共享一个顺序输入，
+		// 或者一个节点重复了一个输出边（见 https://github.com/ninja-build/ninja/pull/519），
+		// 我们可能会再次来到这里。避免再次调度工作。
+		return
+	}
+	if want_e_second != kWantToStart {
+		panic("unexpected want state")
+	}
+	want_e[want_e_first] = kWantToFinish
 
-		pool := edge.pool_
-		if pool.ShouldDelayEdge() {
-			pool.DelayEdge(edge)
-			pool.RetrieveReadyEdges(this.ready_)
-		} else {
-			pool.EdgeScheduled(edge)
-			this.ready_.Add(edge)
-		}
+	edge := want_e_first
+	pool := edge.pool()
+	if pool.ShouldDelayEdge() {
+		pool.DelayEdge(edge)
+		pool.RetrieveReadyEdges(this.ready_)
+	} else {
+		pool.EdgeScheduled(edge)
+		this.ready_.Add(edge)
 	}
 }
 
@@ -446,7 +446,7 @@ func (this *Plan) DyndepsLoaded(scan *DependencyScan, node *Node, ddf DyndepFile
 		if _, exists := this.want_[we]; !exists {
 			continue
 		}
-		if !this.EdgeMaybeReady(this.want_, err) {
+		if !this.EdgeMaybeReady(this.want_, we, err) {
 			return false
 		}
 	}

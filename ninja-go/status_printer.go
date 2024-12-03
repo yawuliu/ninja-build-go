@@ -232,52 +232,52 @@ func SnprintfRate(rate float64, format string) string {
 // / @param progress_status_format The format of the progress status.
 // / @param status The status of the edge.
 func (this *StatusPrinter) FormatProgressStatus(progress_status_format string, time_millis int64) string {
-	out := ""
-	buf := ""
-	for i := 0; i < len(progress_status_format); i++ {
-		s := progress_status_format[i]
-		if s == '\000' {
+	var out strings.Builder
+	for s := 0; s < len(progress_status_format); s++ {
+		if progress_status_format[s] == '\000' {
 			break
 		}
-		if s == '%' {
-			s = progress_status_format[i+1]
-			switch s {
+		if progress_status_format[s] == '%' {
+			s++
+			switch progress_status_format[s] {
 			case '%':
-				out += string('%')
+				out.WriteByte('%')
 				// Started edges.
 			case 's':
-				fmt.Sprintf(buf, "%d", this.started_edges_)
-				out += buf
+				buf := fmt.Sprintf("%d", this.started_edges_)
+				out.WriteString(buf)
 				// Total edges.
 			case 't':
-				fmt.Sprintf(buf, "%d", this.total_edges_)
-				out += buf
+				buf := fmt.Sprintf("%d", this.total_edges_)
+				out.WriteString(buf)
 				// Running edges.
 			case 'r':
 				{
-					fmt.Sprintf(buf, "%d", this.running_edges_)
-					out += buf
+					buf := fmt.Sprintf("%d", this.running_edges_)
+					out.WriteString(buf)
 				}
 
 				// Unstarted edges.
 			case 'u':
-				fmt.Sprintf("%d", this.total_edges_-this.started_edges_)
-				out += buf
+				buf := fmt.Sprintf("%d", this.total_edges_-this.started_edges_)
+				out.WriteString(buf)
+
 				// Finished edges.
 			case 'f':
-				fmt.Sprintf("%d", this.finished_edges_)
-				out += buf
-				break
+				buf := fmt.Sprintf("%d", this.finished_edges_)
+				out.WriteString(buf)
 
 				// Overall finished edges per second.
 			case 'o':
-				buf = SnprintfRate(float64(this.finished_edges_)/float64(this.time_millis_/1e3), "%.1f")
-				out += buf
+				buf := SnprintfRate(float64(this.finished_edges_)/(float64(this.time_millis_)/1e3), "%.1f")
+				out.WriteString(buf)
+
 				// Current rate, average over the last '-j' jobs.
 			case 'c':
 				this.current_rate_.UpdateRate(this.finished_edges_, this.time_millis_)
-				buf = SnprintfRate(this.current_rate_.rate(), "%.1f")
-				out += buf
+				buf := SnprintfRate(this.current_rate_.rate(), "%.1f")
+				out.WriteString(buf)
+
 				// Percentage of edges completed
 			case 'p':
 				{
@@ -285,75 +285,74 @@ func (this *StatusPrinter) FormatProgressStatus(progress_status_format string, t
 					if this.finished_edges_ != 0 && this.total_edges_ != 0 {
 						percent = (100 * this.finished_edges_) / this.total_edges_
 					}
-					fmt.Sprintf(buf, "%3i%%", percent)
-					out += buf
+					buf := fmt.Sprintf("%3i%%", percent)
+					out.WriteString(buf)
 				}
 				// Wall time
-			// elapsed, seconds
-			case 'e', 'w', 'E', 'W': // elapsed, human-readable
+				// elapsed, seconds
+				// elapsed, human-readable
 				// ETA, seconds
-				// ETA, human-readable
+			case 'e', 'E', 'w', 'W': // ETA, human-readable
 				{
-					elapsed_sec := this.time_millis_ / 1e3
-					eta_sec := -1 // To be printed as "?".
+					elapsed_sec := float64(this.time_millis_ / 1e3)
+					eta_sec := float64(-1) // To be printed as "?".
 					if this.time_predicted_percentage_ != 0.0 {
 						// So, we know that we've spent time_millis_ wall clock,
 						// and that is time_predicted_percentage_ percent.
 						// How much time will we need to complete 100%?
-						total_wall_time := int64(float64(this.time_millis_) / this.time_predicted_percentage_)
+						total_wall_time := float64(this.time_millis_) / this.time_predicted_percentage_
 						// Naturally, that gives us the time remaining.
-						eta_sec = int((total_wall_time - this.time_millis_) / 1e3)
+						eta_sec = (total_wall_time - float64(this.time_millis_)) / 1e3
 					}
 
 					print_with_hours :=
 						elapsed_sec >= 60*60 || eta_sec >= 60*60
 
-					sec := -1
-					switch s {
+					sec := float64(-1)
+					switch progress_status_format[s] {
 					case 'e', 'w': // elapsed, human-readable // elapsed, seconds
-						sec = int(elapsed_sec)
-					case 'E', 'W': // ETA, human-readable // ETA, seconds
+						sec = elapsed_sec
+						break
+					case 'E', 'W': //  // ETA, seconds ETA, human-readable
 						sec = eta_sec
+						break
 					}
-
+					buf := ""
 					if sec < 0 {
-						fmt.Sprintf(buf, "?")
+						buf = fmt.Sprintf("?")
 					} else {
-						switch s {
-						// elapsed, seconds
-						case 'e', 'E': // ETA, seconds
-							fmt.Sprintf(buf, "%.3f", sec)
-							break
-							// elapsed, human-readable
-						case 'w', 'W': // ETA, human-readable
+						switch progress_status_format[s] {
+						case 'e', 'E': // ETA, seconds // elapsed, seconds
+							buf = fmt.Sprintf("%.3f", sec)
+						case 'w', 'W': // ETA, human-readable // elapsed, human-readable
 							if print_with_hours {
-								fmt.Sprintf(buf, FORMAT_TIME_HMMSS(int64(sec)))
+								buf = fmt.Sprintf(FORMAT_TIME_HMMSS(int64(sec)))
 							} else {
-								fmt.Sprintf(buf, FORMAT_TIME_MMSS(int64(sec)))
+								buf = fmt.Sprintf(FORMAT_TIME_MMSS(int64(sec)))
 							}
 						}
 					}
-					out += buf
+					out.WriteString(buf)
+					break
 				}
 
 			// Percentage of time spent out of the predicted time total
 			case 'P':
 				{
-					fmt.Sprintf(buf, "%3i%%",
-						(int)(100.*this.time_predicted_percentage_))
-					out += buf
+					buf := fmt.Sprintf("%3i%%", (int)(100.*this.time_predicted_percentage_))
+					out.WriteString(buf)
 				}
 
 			default:
-				log.Fatalf("unknown placeholder '%%%c' in $NINJA_STATUS", s)
+				log.Fatalln("unknown placeholder '%%%c' in $NINJA_STATUS", progress_status_format[s])
 				return ""
 			}
 		} else {
-			out += string(s)
+			out.WriteByte(progress_status_format[s])
 		}
 	}
 
-	return out
+	return out.String()
 }
 
 // / Set the |explanations_| pointer. Used to implement `-d explain`.

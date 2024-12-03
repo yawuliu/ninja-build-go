@@ -1,12 +1,12 @@
 package ninja_go
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"runtime"
-	"strings"
 )
 
 type Subprocess struct {
@@ -23,15 +23,13 @@ func NewSubprocess(use_console bool) *Subprocess {
 // https://github.com/go-cmd/cmd
 func (this *Subprocess) Start(set *SubprocessSet, command string) bool {
 	fmt.Println(command)
+	// command = strings.ReplaceAll(command, "\\", "/")
+	// fmt.Println(command)
 	//if true || this.use_console {
 	if runtime.GOOS == "windows" {
-		args := []string{"/C"}
-		args = append(args, strings.Fields(command)...)
-		this.cmd = exec.Command("cmd", args...) // , "/C", command
+		this.cmd = exec.Command("cmd") // , "/C", command
 	} else {
-		args := []string{"-c"}
-		args = append(args, strings.Fields(command)...)
-		this.cmd = exec.Command("bash", args...) //
+		this.cmd = exec.Command("bash") //
 	}
 	//} else {
 	//	arr := strings.Split(command, " ")
@@ -41,16 +39,17 @@ func (this *Subprocess) Start(set *SubprocessSet, command string) bool {
 	//		this.cmd = exec.Command(arr[0])
 	//	}
 	//}
-	//buffer := bytes.Buffer{}
-	//buffer.Write([]byte("\r\n" + command + "\r\n"))
-	//this.cmd.Stdin = &buffer
+	buffer := bytes.Buffer{}
+	buffer.Write([]byte(command))
+	buffer.WriteString("\n")
+	this.cmd.Stdin = &buffer
 	//stdin, err := this.cmd.StdinPipe()
 	//if err != nil {
 	//	log.Fatalln(err)
 	//	return false
 	//}
-	this.cmd.Stdout = os.Stdout
-	this.cmd.Stderr = os.Stderr
+	//this.cmd.Stdout = os.Stdout
+	//this.cmd.Stderr = os.Stderr
 	//this.cmd.Env = os.Environ()
 	err := this.cmd.Start()
 	if err != nil {
@@ -95,7 +94,7 @@ func (this *Subprocess) Done() bool {
 }
 
 func (this *Subprocess) GetOutput() string {
-	buf, _ := this.cmd.Output()
+	buf, _ := this.cmd.CombinedOutput()
 	return string(buf)
 }
 
@@ -122,6 +121,7 @@ func (this *SubprocessSet) NotifyInterrupted(dwCtrlType int) bool {
 
 // Add adds a new subprocess to the set.
 func (this *SubprocessSet) Add(command string, useConsole bool) *Subprocess {
+	fmt.Printf("Add %s\n", command)
 	subprocess := NewSubprocess(useConsole)
 	if succ := subprocess.Start(this, command); succ {
 		this.running_ = append(this.running_, subprocess)
@@ -135,16 +135,14 @@ func (this *SubprocessSet) DoWork() bool {
 	if len(this.running_) == 0 {
 		return true
 	}
-	subproc := this.running_[len(this.running_)-1]
+	subproc := this.running_[0]
 	err := subproc.cmd.Wait()
-	succ := true
 	if err != nil {
 		log.Fatalln(err)
-		succ = false
 	}
-	this.running_ = this.running_[0 : len(this.running_)-1]
+	this.running_ = this.running_[1:]
 	this.finished_ = append(this.finished_, subproc)
-	return succ
+	return false
 }
 
 // NextFinished returns the next finished subprocess.

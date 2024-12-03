@@ -47,13 +47,13 @@ func StripAnsiEscapeCodes(in string) string {
 
 func CanonicalizePath(path *string, slash_bits *uint64) {
 	// 确保路径是绝对的
-	absPath, err := filepath.Abs(*path)
-	if err != nil {
-		fmt.Printf("Error getting absolute path: %v\n", err)
-		return
-	}
+	//absPath, err := filepath.Abs(*path)
+	//if err != nil {
+	//	fmt.Printf("Error getting absolute path: %v\n", err)
+	//	return
+	//}
 	// 清理路径，去掉多余的分隔符和".."
-	cleanPath := filepath.Clean(absPath)
+	cleanPath := filepath.Clean(*path)
 
 	// 如果需要，这里可以进一步处理路径，例如转换所有分隔符为一个特定的字符
 	// 但在Go中，这通常不是必需的，因为filepath.Clean已经处理了路径分隔符
@@ -64,19 +64,19 @@ func CanonicalizePath(path *string, slash_bits *uint64) {
 
 func Error(msg string, ap ...interface{}) {
 	fmt.Fprint(os.Stderr, "ninja: error: ")
-	fmt.Fprint(os.Stderr, ap...)
+	fmt.Fprintf(os.Stderr, msg, ap...)
 	fmt.Fprint(os.Stderr, "\n")
 }
 
 func Info(msg string, ap ...interface{}) {
 	fmt.Fprint(os.Stdout, "ninja: ")
-	fmt.Fprint(os.Stdout, ap...)
+	fmt.Fprintf(os.Stdout, msg, ap...)
 	fmt.Fprint(os.Stdout, "\n")
 }
 
 func Warning(msg string, ap ...interface{}) {
 	fmt.Fprint(os.Stderr, "ninja: warning: ")
-	fmt.Fprint(os.Stderr, ap...)
+	fmt.Fprintf(os.Stderr, msg, ap...)
 	fmt.Fprint(os.Stderr, "\n")
 }
 

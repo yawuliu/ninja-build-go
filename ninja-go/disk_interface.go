@@ -5,9 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"syscall"
 	"time"
 	"unicode"
 )
@@ -86,27 +89,20 @@ func NewRealDiskInterface() *RealDiskInterface {
 	ret := RealDiskInterface{}
 	ret.use_cache_ = false
 	ret.long_paths_enabled_ = false
+	ret.cache_ = make(map[string]DirCache)
 	return &ret
 }
 func (this *RealDiskInterface) ReleaseRealDiskInterface() {}
 
 // TimeStampFromFileTime 将 FILETIME 结构转换为 Unix 时间戳
 func TimeStampFromFileTime(filetime time.Time) TimeStamp {
-	// FILETIME 是自 1601 年 1 月 1 日以来的 100 纳秒间隔
-	// Unix 时间戳是自 1970 年 1 月 1 日以来的秒数
-	// 将 FILETIME 转换为 Unix 时间戳，首先需要将纳秒转换为秒，并调整纪元差异
-
-	// 1601 年到 1970 年之间的秒数差
-	const epochDifference = int64((400 * 365 * 24 * 60 * 60) + (97 * 24 * 60 * 60)) // 400 年加上 97 个闰年
-	const nanosecondsPerSecond = int64(1e9)
-
-	// FILETIME 表示的纳秒数
-	filetimeNanoseconds := uint64(filetime.UnixNano())
-
-	// 转换为 Unix 时间戳
-	timestamp := uint64((filetimeNanoseconds - uint64(epochDifference)*uint64(nanosecondsPerSecond)) / uint64(nanosecondsPerSecond))
-
-	return TimeStamp(timestamp)
+	ft := syscall.NsecToFiletime(filetime.UnixNano())
+	// FILETIME is in 100-nanosecond increments since the Windows epoch.
+	// We don't much care about epoch correctness but we do want the
+	// resulting value to fit in a 64-bit integer.
+	mtime := (uint64(ft.HighDateTime) << 32) | (uint64(ft.LowDateTime))
+	// 1600 epoch -> 2000 epoch (subtract 400 years).
+	return TimeStamp(mtime - uint64(12622770400)*uint64(1000000000/100))
 }
 
 func StatSingleFile(path string, err *string) TimeStamp {
@@ -122,39 +118,27 @@ func StatSingleFile(path string, err *string) TimeStamp {
 }
 
 // StatAllFilesInDir 遍历目录中的所有文件，并填充时间戳映射
-func StatAllFilesInDir(dir string, stamps map[string]TimeStamp, err1 *string) bool {
-	files, err := os.ReadDir(dir)
+func StatAllFilesInDir(dir string, stamps *DirCache, err1 *string) bool {
+	_, err := os.Stat(dir)
 	if err != nil {
-		if os.IsNotExist(err) || os.IsPermission(err) {
+		if os.IsNotExist(err) {
 			return true // 对应于 C++ 中的 ERROR_FILE_NOT_FOUND 或 ERROR_PATH_NOT_FOUND
-		}
+		} // || os.IsPermission(err)
 		*err1 = fmt.Errorf("ReadDir(%s): %w", dir, err).Error()
 		return false
 	}
-
-	for _, file := range files {
-		if file.IsDir() {
-			continue
+	err = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil { // We also do not want files we cannot access.
+			fmt.Printf("Could not access %q: %v\n", path, err)
+			return nil
 		}
-		if file.Name() == ".." {
-			// Skip ".." as it is not a file
-			continue
-		}
-
-		filePath := filepath.Join(dir, file.Name())
-		fileInfo, err := os.Stat(filePath)
-		if err != nil {
-			*err1 = fmt.Errorf("Stat(%s): %w", filePath, err).Error()
-			return false
-		}
-
-		// 转换文件名为小写
-		lowerName := strings.ToLower(file.Name())
-
-		// 将文件的最后写入时间添加到映射中
-		stamps[lowerName] = TimeStampFromFileTime(fileInfo.ModTime())
+		lowerName := strings.ToLower(info.Name())
+		(*stamps)[lowerName] = TimeStampFromFileTime(info.ModTime())
+		return nil
+	})
+	if err != nil {
+		log.Printf("walk error [%v]\n", err)
 	}
-
 	return true
 }
 
@@ -188,7 +172,7 @@ type win32VolumeInfo struct {
 // / Create a file, with the specified name and contents
 // / Returns true on success, false on failure
 func (this *RealDiskInterface) WriteFile(path string, contents string) bool {
-	fp, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0664)
+	fp, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0664)
 	if err != nil {
 		Error("WriteFile(%s): Unable to create file. %v", path, err)
 		return false
@@ -249,9 +233,11 @@ func (this *RealDiskInterface) RemoveFile(path string) int {
 
 // / Whether stat information can be cached.  Only has an effect on Windows.
 func (this *RealDiskInterface) AllowStatCache(allow bool) {
-	this.use_cache_ = allow
-	if !this.use_cache_ {
-		this.cache_ = map[string]DirCache{}
+	if runtime.GOOS == "windows" {
+		this.use_cache_ = allow
+		if !this.use_cache_ {
+			this.cache_ = map[string]DirCache{}
+		}
 	}
 }
 

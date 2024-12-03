@@ -212,7 +212,7 @@ func (this *BuildLog) LookupByOutput(path string) *LogEntry {
 
 // / Serialize an entry into a log file.
 func (this *BuildLog) WriteEntry(f *os.File, entry *LogEntry) (bool, error) {
-	_, err := fmt.Fprintf(f, "%d\t%d\t%d\t%s\t%d\n",
+	_, err := fmt.Fprintf(f, "%d\t%d\t%d\t%s\t%x\n",
 		entry.start_time, entry.end_time, entry.mtime,
 		entry.output, entry.command_hash)
 	return err == nil, err
@@ -344,14 +344,18 @@ func (this *BuildLog) OpenForWriteIfNeeded() bool {
 		return false
 	}
 	logFile := bufio.NewWriter(file)
-	if _, err := file.Seek(0, os.SEEK_END); err != nil {
+	fileInfo, err := os.Stat(this.log_file_path_)
+	if err != nil {
+		fmt.Println("Error getting file info:", err)
 		return false
 	}
-	if _, err := file.Readdirnames(1); err != io.EOF {
+	fileSize := fileInfo.Size()
+	if fileSize == 0 {
 		_, err := logFile.WriteString(fmt.Sprintf(kFileSignature, kCurrentVersion))
 		if err != nil {
 			return false
 		}
+		logFile.Flush()
 	}
 
 	this.log_file_ = file
@@ -360,7 +364,7 @@ func (this *BuildLog) OpenForWriteIfNeeded() bool {
 
 func HashCommand(command string) uint64 {
 	command = command + "\x00"
-	return rapidhash([]byte(command), uint64(len(command)))
+	return rapidhash([]byte(command), uint64(len(command)-1))
 }
 
 // Used by tests.

@@ -52,13 +52,14 @@ func (this *Plan) AddSubTarget(node *Node, dependent *Node, err *string, dyndep_
 		return false
 	}
 
-	if edge.outputs_ready_ {
+	if edge.outputs_ready() {
 		return false // 不需要做任何事情
 	}
-
+	want_ins_second := false
 	// 如果 want_ 中没有 edge 的条目，则创建一个条目
 	if _, exists := this.want_[edge]; !exists {
 		this.want_[edge] = kWantNothing
+		want_ins_second = true
 	}
 	want := this.want_[edge]
 
@@ -76,6 +77,9 @@ func (this *Plan) AddSubTarget(node *Node, dependent *Node, err *string, dyndep_
 		dyndep_walk[edge] = true
 	}
 
+	if !want_ins_second {
+		return true // We've already processed the inputs.
+	}
 	for _, input := range edge.inputs_ {
 		if !this.AddSubTarget(input, node, err, dyndep_walk) && *err != "" {
 			return false
@@ -410,7 +414,11 @@ func (this *Plan) DyndepsLoaded(scan *DependencyScan, node *Node, ddf DyndepFile
 	}
 
 	// 查找构建计划中具有新动态依赖信息的边
-	dyndepRoots := make([]*Dyndeps, 0)
+	type dyndepRoot struct {
+		first  *Edge
+		second *Dyndeps
+	}
+	dyndepRoots := make([]dyndepRoot, 0)
 	for oe, info := range ddf {
 		if oe.outputs_ready_ {
 			continue
@@ -420,14 +428,14 @@ func (this *Plan) DyndepsLoaded(scan *DependencyScan, node *Node, ddf DyndepFile
 			continue
 		}
 
-		dyndepRoots = append(dyndepRoots, info)
+		dyndepRoots = append(dyndepRoots, dyndepRoot{first: oe, second: info})
 	}
 
 	// 遍历动态依赖发现的图的部分，将其添加到构建计划中
 	dyndepWalk := map[*Edge]bool{}
-	for _, oeInfo := range dyndepRoots {
-		for _, input := range oeInfo.implicit_inputs_ {
-			if !this.AddSubTarget(input, node, err, dyndepWalk) && *err != "" {
+	for _, oe := range dyndepRoots {
+		for _, input := range oe.second.implicit_inputs_ {
+			if !this.AddSubTarget(input, oe.first.outputs_[0], err, dyndepWalk) && *err != "" {
 				return false
 			}
 		}

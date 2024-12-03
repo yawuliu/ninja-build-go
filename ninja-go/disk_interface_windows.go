@@ -4,6 +4,7 @@ package ninja_go
 
 import (
 	"fmt"
+	"path/filepath"
 	"syscall"
 	"unsafe"
 )
@@ -56,12 +57,7 @@ func (this *RealDiskInterface) Stat(path string, err *string) TimeStamp {
 	}
 
 	dir := DirName(path)
-	base := ""
-	if len(dir) > 0 {
-		base = path[len(dir)+1:]
-	} else {
-		base = path[0:]
-	}
+	base := filepath.Base(path)
 
 	if base == ".." {
 		// StatAllFilesInDir does not report any information for base = "..".
@@ -75,14 +71,15 @@ func (this *RealDiskInterface) Stat(path string, err *string) TimeStamp {
 
 	ci_second, ok := this.cache_[dir_lowercase]
 	if !ok {
-		this.cache_[dir_lowercase] = DirCache{}
+		ci_second = make(map[string]TimeStamp)
+		this.cache_[dir_lowercase] = ci_second
 		if dir == "" {
-			if !StatAllFilesInDir(".", ci_second, err) {
+			if !StatAllFilesInDir(".", &ci_second, err) {
 				delete(this.cache_, dir_lowercase)
 				return -1
 			}
 		} else {
-			if !StatAllFilesInDir(dir, ci_second, err) {
+			if !StatAllFilesInDir(dir, &ci_second, err) {
 				delete(this.cache_, dir_lowercase)
 				return -1
 			}

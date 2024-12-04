@@ -678,6 +678,7 @@ func (this *DependencyScan) RecomputeOutputDirty(edge *Edge, most_recent_input *
 			entry = this.build_log().LookupByOutput(output.path())
 			return entry != nil
 		}() {
+			// TODO: 远程缓存的修改点
 			if !generator && HashCommand(command) != entry.command_hash {
 				// May also be dirty due to the command changing since the last build.
 				// But if this is a generator rule, the command changing does not make us

@@ -1,9 +1,8 @@
-package main
+package ninja_go
 
 import (
 	"fmt"
 	"log"
-	"ninja-build-go/ninja-go"
 	"os"
 	"os/signal"
 	"syscall"
@@ -17,19 +16,19 @@ func TerminateHandler() {
 }
 
 func real_main(args []string) error {
-	config := ninja_go.NewBuildConfig()
-	options := ninja_go.Options{}
+	config := NewBuildConfig()
+	options := Options{}
 	options.InputFile = "build.ninja"
 
 	// setvbuf(stdout, NULL, _IOLBF, BUFSIZ)
 	ninja_command := args[0]
 
-	exit_code := ninja_go.ReadFlags(&args, &options, config)
+	exit_code := ReadFlags(&args, &options, config)
 	if exit_code >= 0 {
 		os.Exit(exit_code)
 	}
 
-	status := ninja_go.Statusfactory(config)
+	status := Statusfactory(config)
 
 	if options.WorkingDir != "" {
 		// The formatting of this string, complete with funny quotes, is
@@ -37,7 +36,7 @@ func real_main(args []string) error {
 		// subsequent commands.
 		// Don't print this if a tool is being used, so that tool output
 		// can be piped into a file without this string showing up.
-		if options.Tool == nil && config.Verbosity != ninja_go.NO_STATUS_UPDATE {
+		if options.Tool == nil && config.Verbosity != NO_STATUS_UPDATE {
 			status.Info("Entering directory `%s'", options.WorkingDir)
 		}
 
@@ -46,7 +45,7 @@ func real_main(args []string) error {
 		}
 	}
 
-	if options.Tool != nil && options.Tool.When == ninja_go.RUN_AFTER_FLAGS {
+	if options.Tool != nil && options.Tool.When == RUN_AFTER_FLAGS {
 		// None of the RUN_AFTER_FLAGS actually use a NinjaMain, but it's needed
 		// by other tools.
 		// ninja := NewNinjaMain(ninja_command, &config)
@@ -56,20 +55,20 @@ func real_main(args []string) error {
 	// Limit number of rebuilds, to prevent infinite loops.
 	kCycleLimit := 100
 	for cycle := 1; cycle <= kCycleLimit; cycle++ {
-		ninja := ninja_go.NewNinjaMain(ninja_command, config)
+		ninja := NewNinjaMain(ninja_command, config)
 
-		parser_opts := ninja_go.NewManifestParserOptions()
+		parser_opts := NewManifestParserOptions()
 		if options.PhonyCycleShouldErr {
-			parser_opts.PhonyCycleAction = ninja_go.KPhonyCycleActionError
+			parser_opts.PhonyCycleAction = KPhonyCycleActionError
 		}
-		parser := ninja_go.NewManifestParser(ninja.State_, ninja.DiskInterface, parser_opts)
+		parser := NewManifestParser(ninja.State_, ninja.DiskInterface, parser_opts)
 		var err string
 		if !parser.Load(options.InputFile, &err, nil) {
 			status.Error("%s", err)
 			os.Exit(1)
 		}
 
-		if options.Tool != nil && options.Tool.When == ninja_go.RUN_AFTER_LOAD {
+		if options.Tool != nil && options.Tool.When == RUN_AFTER_LOAD {
 			os.Exit(options.Tool.Func1(&options, &args))
 		}
 
@@ -81,7 +80,7 @@ func real_main(args []string) error {
 			os.Exit(1)
 		}
 
-		if options.Tool != nil && options.Tool.When == ninja_go.RUN_AFTER_LOGS {
+		if options.Tool != nil && options.Tool.When == RUN_AFTER_LOGS {
 			os.Exit(options.Tool.Func1(&options, &args))
 		}
 
@@ -102,7 +101,7 @@ func real_main(args []string) error {
 		ninja.ParsePreviousElapsedTimes()
 
 		result := ninja.RunBuild(&args, status)
-		if ninja_go.GMetrics != nil {
+		if GMetrics != nil {
 			ninja.DumpMetrics()
 		}
 		os.Exit(result)

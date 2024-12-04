@@ -1,4 +1,4 @@
-package ninja_go
+package main
 
 type Status interface {
 	EdgeAddedToPlan(edge *Edge)

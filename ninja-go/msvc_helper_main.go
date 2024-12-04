@@ -1,4 +1,4 @@
-package ninja_go
+package main
 
 //func Usage() {
 //  fmt.Printf(

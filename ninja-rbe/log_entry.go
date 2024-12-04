@@ -1,15 +1,15 @@
-package ninja_rbe
+package main
 
 type TimeStamp int64
 type LogEntry struct {
-	output       string    /* index_output */
-	command_hash uint64    /* index_hash,UNIQUE */
-	mtime        TimeStamp /* index_hash,UNIQUE */
-	start_time   int
-	end_time     int
+	Output      string /* index_output */
+	CommandHash string /* index_hash,UNIQUE */
+	Mtime       string /* index_hash,UNIQUE */
+	StartTime   string
+	EndTime     string
 	//
 	InstanceId      string /* index_inst */
-	CreatedAt       uint64
-	LastLastAccess  uint64 /* index_last_access */
-	ExpiredDuration uint64 /* index_expired */
+	CreatedAt       int64
+	LastAccess      int64 /* index_last_access */
+	ExpiredDuration int64 /* index_expired */
 }

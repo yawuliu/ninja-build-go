@@ -1,9 +1,10 @@
-package ninja_go
+package main
 
 import (
 	"fmt"
 	"github.com/ahrtr/gocontainer/queue/priorityqueue"
 	"github.com/edwingeng/deque"
+	"github.com/fatih/color"
 	"log"
 	"runtime"
 	"slices"
@@ -678,7 +679,7 @@ func (this *DependencyScan) RecomputeOutputDirty(edge *Edge, most_recent_input *
 			entry = this.build_log().LookupByOutput(output.path())
 			return entry != nil
 		}() {
-			// TODO: 远程缓存的修改点
+			color.Blue("command: %s, hash: %x, mtime: %d", command, HashCommand(command), most_recent_input.mtime())
 			if !generator && HashCommand(command) != entry.command_hash {
 				// May also be dirty due to the command changing since the last build.
 				// But if this is a generator rule, the command changing does not make us

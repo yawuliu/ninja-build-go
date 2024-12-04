@@ -1,4 +1,4 @@
-package ninja_go
+package main
 
 type LoadStatus int8
 

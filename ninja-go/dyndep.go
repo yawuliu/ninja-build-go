@@ -1,4 +1,4 @@
-package ninja_go
+package main
 
 type DyndepLoader struct {
 	state_          *State

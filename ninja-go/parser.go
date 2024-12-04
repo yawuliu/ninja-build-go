@@ -1,4 +1,4 @@
-package ninja_go
+package main
 
 type Parser interface {
 	Load(filename string, err *string, parent *Lexer) bool

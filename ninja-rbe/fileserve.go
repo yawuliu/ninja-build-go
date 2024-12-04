@@ -1,12 +1,14 @@
-package ninja_rbe
+package main
 
 import (
+	"context"
+	"encoding/json"
 	"expvar"
 	"fmt"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/expvarhandler"
 	"log"
-	"net/http"
+	"path/filepath"
 	"time"
 )
 
@@ -23,24 +25,62 @@ var (
 
 	// Total size in bytes for OK response bodies served.
 	fsResponseBodyBytes = expvar.NewInt("fsResponseBodyBytes")
+
+	fsRootDir string
+	fsServer  *fasthttp.Server
 )
 
 func HandleUpload(ctx *fasthttp.RequestCtx) {
+	ctx.Response.Reset()
 	output := string(ctx.FormValue("output"))
 	commandHash := string(ctx.FormValue("command_hash"))
 	startTime := string(ctx.FormValue("start_time"))
 	endTime := string(ctx.FormValue("end_time"))
 	mtime := string(ctx.FormValue("mtime"))
+	instance_id := string(ctx.FormValue("instance_id"))
+	expired_duration := string(ctx.FormValue("expired_duration"))
 	header, err := ctx.FormFile("file")
 	if err != nil {
-		ctx.Error(err.Error(), http.StatusInternalServerError)
+		ctx.Error(err.Error(), fasthttp.StatusInternalServerError)
+		return
+	}
+	exist, err := CheckCommandHashAndMtimeExist(commandHash, mtime)
+	if err != nil {
+		ctx.Error(err.Error(), fasthttp.StatusInternalServerError)
+		return
+	}
+	if exist {
+		ctx.Success("plain/text", []byte("already exists."))
 		return
 	}
 	storeName := fmt.Sprintf("%s_%s", commandHash, mtime)
-	if err := fasthttp.SaveMultipartFile(header, storeName); err != nil {
-		ctx.Error(err.Error(), http.StatusInternalServerError)
+	if err := fasthttp.SaveMultipartFile(header, filepath.Join(fsRootDir, storeName)); err != nil {
+		ctx.Error(err.Error(), fasthttp.StatusInternalServerError)
 		return
 	}
+	err = InsertLogEntry(output, commandHash, startTime, endTime, mtime, instance_id, expired_duration)
+	if err != nil {
+		ctx.Error(err.Error(), fasthttp.StatusInternalServerError)
+		return
+	}
+	ctx.Success("plain/text", []byte("success"))
+}
+
+func HandleQuery(ctx *fasthttp.RequestCtx) {
+	ctx.Response.Reset()
+	commandHash := string(ctx.QueryArgs().Peek("command_hash"))
+	mtime := string(ctx.QueryArgs().Peek("mtime"))
+	found, err := FindCommandHashAndMtime(commandHash, mtime)
+	if err != nil {
+		ctx.Error(err.Error(), fasthttp.StatusInternalServerError)
+		return
+	}
+	buf, err := json.Marshal(found)
+	if err != nil {
+		ctx.Error(err.Error(), fasthttp.StatusInternalServerError)
+		return
+	}
+	ctx.Success("application/json", buf)
 }
 
 func updateFSCounters(ctx *fasthttp.RequestCtx) {
@@ -64,6 +104,7 @@ func updateFSCounters(ctx *fasthttp.RequestCtx) {
 
 func ServeFiles(addr, rootDir string, compress, byteRange, generateIndexPages, vhost bool) {
 	// Setup FS handler
+	fsRootDir = rootDir
 	fs := &fasthttp.FS{
 		Root:               rootDir,
 		IndexNames:         []string{"index.html"},
@@ -87,6 +128,8 @@ func ServeFiles(addr, rootDir string, compress, byteRange, generateIndexPages, v
 			expvarhandler.ExpvarHandler(ctx)
 		case "/upload":
 			HandleUpload(ctx)
+		case "/query":
+			HandleQuery(ctx)
 		default:
 			fsHandler(ctx)
 			updateFSCounters(ctx)
@@ -95,15 +138,23 @@ func ServeFiles(addr, rootDir string, compress, byteRange, generateIndexPages, v
 	// Start HTTP server.
 	if len(addr) > 0 {
 		log.Printf("Starting HTTP server on %q", addr)
-		server := &fasthttp.Server{
+		fsServer = &fasthttp.Server{
 			Handler:      requestHandler,
 			ReadTimeout:  15 * time.Minute,
 			WriteTimeout: 15 * time.Minute,
 			Concurrency:  256 * 1024,
 		}
-		if err := server.ListenAndServe(addr); err != nil {
+		if err := fsServer.ListenAndServe(addr); err != nil {
 			log.Fatalf("error in ListenAndServe: %v", err)
 		}
 	}
 	// Wait forever.
+}
+
+func shutdown(ctx context.Context) {
+	CloseDb()
+	err := fsServer.ShutdownWithContext(ctx)
+	if err != nil {
+		log.Println(err)
+	}
 }

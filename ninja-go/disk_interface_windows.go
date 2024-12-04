@@ -1,6 +1,6 @@
 //go:build windows
 
-package ninja_go
+package main
 
 import (
 	"fmt"

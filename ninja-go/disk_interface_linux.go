@@ -1,6 +1,6 @@
 //go:build linux
 
-package ninja_go
+package main
 
 import (
 	"fmt"

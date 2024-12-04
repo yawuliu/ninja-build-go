@@ -1,4 +1,4 @@
-package ninja_go
+package main
 
 type CommandCollector struct {
 	visited_nodes_ map[*Node]bool

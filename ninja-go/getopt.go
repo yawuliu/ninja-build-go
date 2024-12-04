@@ -1,4 +1,4 @@
-package ninja_go
+package main
 
 /* macros defined by this include file */
 const (

@@ -29,7 +29,7 @@ type RealDiskInterface struct {
 }
 
 type FileReader interface {
-	Stat(path string, err *string) TimeStamp
+	Stat(path string) (mtime TimeStamp, notExist bool, err error)
 	WriteFile(path string, contents string) bool
 	MakeDir(path string) bool
 	MakeDirs(path string, err *string) bool
@@ -40,7 +40,7 @@ type FileReader interface {
 
 type DiskInterface interface {
 	FileReader
-	Stat(path string, err *string) TimeStamp
+	Stat(path string) (mtime TimeStamp, notExist bool, err error)
 	WriteFile(path string, contents string) bool
 	MakeDir(path string) bool
 	MakeDirs(path string, err *string) bool
@@ -66,12 +66,13 @@ func (this *RealDiskInterface) MakeDirs(path string, err1 *string) bool {
 	if dir == "" {
 		return true // Reached root; assume it's there.
 	}
-	mtime := this.Stat(dir, err1)
-	if mtime < 0 {
+	_, notExist, err := this.Stat(dir)
+	if err != nil {
+		*err1 = err.Error()
 		Error("%s", err1)
 		return false
 	}
-	if mtime > 0 {
+	if !notExist {
 		return true // Exists already; we're done.
 	}
 	// Directory doesn't exist.  Try creating its parent first.

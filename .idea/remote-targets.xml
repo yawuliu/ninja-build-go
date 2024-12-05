@@ -9,8 +9,8 @@
         </config>
         <ContributedStateBase type="GoLanguageRuntime">
           <config>
-            <option name="goPath" value="/home/liuyawu/go-bin" />
-            <option name="goRoot" value="/home/liuyawu/go1213/go/bin/go" />
+            <option name="goPath" value="/home/liuyawu/go" />
+            <option name="goRoot" value="/home/liuyawu/go_123/go/bin/go" />
             <option name="goVersion" value="go1.13.8 linux/amd64" />
           </config>
         </ContributedStateBase>

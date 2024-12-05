@@ -301,8 +301,8 @@ func (this *BuildLog) Restat(path string, disk_interface DiskInterface, outputs 
 			}
 		}
 		if !skip {
-			var mtime TimeStamp = disk_interface.Stat(second.output, err)
-			if mtime == -1 {
+			mtime, _, err1 := disk_interface.Stat(second.output)
+			if err1 != nil {
 				return false
 			}
 			second.mtime = mtime

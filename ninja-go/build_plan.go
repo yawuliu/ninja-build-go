@@ -195,7 +195,7 @@ func (this *Plan) CleanNode(scan *DependencyScan, node *Node, err *string) bool 
 			// Recompute most_recent_input.
 			var most_recent_input *Node = nil
 			for i := begin; i < end; i++ {
-				if most_recent_input == nil || oe.inputs_[i].mtime() > most_recent_input.mtime() {
+				if most_recent_input == nil || oe.inputs_[i].mtime() != most_recent_input.mtime() {
 					most_recent_input = oe.inputs_[i]
 				}
 

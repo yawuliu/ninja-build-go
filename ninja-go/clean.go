@@ -31,12 +31,12 @@ func (this *Cleaner) RemoveFile(path string) int {
 }
 
 func (this *Cleaner) FileExists(path string) bool {
-	err := ""
-	mtime := this.disk_interface_.Stat(path, &err)
-	if mtime == -1 {
-		Error("%s", err)
+	_, notExist, err := this.disk_interface_.Stat(path)
+	if err != nil {
+		Error("%s", err.Error())
+		return false
 	}
-	return mtime > 0 // Treat Stat() errors as "file does not exist".
+	return !notExist // Treat Stat() errors as "file does not exist".
 }
 
 func (this *Cleaner) Report(path string) {

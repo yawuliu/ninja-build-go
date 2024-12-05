@@ -1049,12 +1049,11 @@ func (this *NinjaMain) ToolDeps(options *Options, args *[]string) int {
 			continue
 		}
 
-		err := ""
-		var mtime TimeStamp = disk_interface.Stat(it.path(), &err)
-		if mtime == -1 {
-			Error("%s", err) // Log and ignore Stat() errors;
+		mtime, notExist, err := disk_interface.Stat(it.path())
+		if err != nil {
+			Error("%s", err.Error()) // Log and ignore Stat() errors;
 		}
-		if mtime == 0 || mtime > deps.mtime {
+		if notExist || mtime != deps.mtime {
 			fmt.Printf("%s: #deps %d, deps mtime %d (%s)\n",
 				it.path(), deps.node_count, deps.mtime,
 				"STALE")
@@ -1434,12 +1433,11 @@ func (this *NinjaMain) IsPathDead(s string) bool {
 	// which seems good enough for this corner case.)
 	// Do keep entries around for files which still exist on disk, for
 	// generators that want to use this information.
-	err := ""
-	mtime := this.DiskInterface.Stat(s, &err)
-	if mtime == -1 {
-		Error("%s", err) // Log and ignore Stat() errors.
+	_, notExist, err := this.DiskInterface.Stat(s)
+	if err != nil {
+		Error("%s", err.Error()) // Log and ignore Stat() errors.
 	}
-	return mtime == 0
+	return notExist
 }
 
 func (this *NinjaMain) ToolRules(options *Options, args *[]string) int {

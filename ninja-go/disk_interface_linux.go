@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-func (this *RealDiskInterface) Stat(path, prefix string, err1 *string) TimeStamp {
+func (this *RealDiskInterface) Stat(path, prefix string) (TimeStamp, error) {
 	METRIC_RECORD("node stat")
 	var st syscall.Stat_t
 

@@ -281,7 +281,7 @@ func (this *ImplicitDepLoader) LoadDepsFromLog(edge *Edge, err *string) bool {
 	}
 
 	// Deps are invalid if the output is newer than the deps.
-	if output.mtime() > deps.mtime {
+	if output.mtime() != deps.mtime {
 		this.explanations_.Record(output,
 			"stored deps info out of date for '%s' (%d vs %d)",
 			output.path(), deps.mtime, output.mtime())

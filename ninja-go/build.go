@@ -227,10 +227,9 @@ func (this *Builder) Cleanup() {
 				// need to rebuild an output because of a modified header file
 				// mentioned in a depfile, and the command touches its depfile
 				// but is interrupted before it touches its output file.)
-				err := ""
-				new_mtime := this.disk_interface_.Stat(o.path(), &err)
-				if new_mtime == -1 { // Log and ignore Stat() errors.
-					this.status_.Error("%s", err)
+				new_mtime, _, err1 := this.disk_interface_.Stat(o.path())
+				if err1 != nil { // Log and ignore Stat() errors.
+					this.status_.Error("%s", err1.Error())
 				}
 				if depfile != "" || o.mtime() != new_mtime {
 					this.disk_interface_.RemoveFile(o.path())
@@ -242,8 +241,7 @@ func (this *Builder) Cleanup() {
 		}
 	}
 
-	err := ""
-	if this.disk_interface_.Stat(this.lock_file_path_, &err) > 0 {
+	if _, notExist, err1 := this.disk_interface_.Stat(this.lock_file_path_); err1 == nil && !notExist {
 		this.disk_interface_.RemoveFile(this.lock_file_path_)
 	}
 }
@@ -428,10 +426,10 @@ func (this *Builder) StartEdge(edge *Edge, err *string) bool {
 
 	this.status_.BuildEdgeStarted(edge, start_time_millis)
 
-	var build_start TimeStamp = -1
-	if this.config_.DryRun {
-		build_start = 0
-	}
+	//var build_start TimeStamp = -1
+	//if this.config_.DryRun {
+	//	build_start = 0
+	//}
 	// Create directories necessary for outputs and remember the current
 	// filesystem mtime to record later
 	// XXX: this will block; do we care?
@@ -440,16 +438,17 @@ func (this *Builder) StartEdge(edge *Edge, err *string) bool {
 		if !ok {
 			return false
 		}
-		if build_start == -1 {
-			this.disk_interface_.WriteFile(this.lock_file_path_, "")
-			build_start = this.disk_interface_.Stat(this.lock_file_path_, err)
-			if build_start == -1 {
-				build_start = 0
-			}
-		}
+		//if build_start == -1 {
+		//	this.disk_interface_.WriteFile(this.lock_file_path_, "")
+		//	var err1 error
+		//	build_start, _, err1 = this.disk_interface_.Stat(this.lock_file_path_)
+		//	if err1 != nil {
+		//		build_start = 0
+		//	}
+		//}
 	}
 
-	edge.command_start_time_ = build_start
+	// edge.command_start_time_ = build_start
 
 	// Create depfile directory if needed.
 	// XXX: this may also block; do we care?
@@ -526,8 +525,8 @@ func (this *Builder) FinishCommand(result *Result, err *string) bool {
 	if !this.config_.DryRun {
 		restat := edge.GetBindingBool("restat")
 		generator := edge.GetBindingBool("generator")
-		node_cleaned := false
-		record_mtime = edge.command_start_time_
+		// node_cleaned := false
+		// record_mtime = edge.command_start_time_
 
 		// restat and generator rules must restat the outputs after the build
 		// has finished. if record_mtime == 0, then there was an error while
@@ -536,11 +535,11 @@ func (this *Builder) FinishCommand(result *Result, err *string) bool {
 		// log.
 		if record_mtime == 0 || restat || generator {
 			for _, o := range edge.outputs_ {
-				var new_mtime TimeStamp = this.disk_interface_.Stat(o.path(), err)
-				if new_mtime == -1 {
+				new_mtime, _, err1 := this.disk_interface_.Stat(o.path())
+				if err1 != nil {
 					return false
 				}
-				if new_mtime > record_mtime {
+				if new_mtime != record_mtime {
 					record_mtime = new_mtime
 				}
 				if (*o).mtime() == new_mtime && restat {
@@ -550,13 +549,13 @@ func (this *Builder) FinishCommand(result *Result, err *string) bool {
 					if !this.plan_.CleanNode(this.scan_, o, err) {
 						return false
 					}
-					node_cleaned = true
+					// node_cleaned = true
 				}
 			}
 		}
-		if node_cleaned {
-			record_mtime = edge.command_start_time_
-		}
+		//if node_cleaned {
+		//	record_mtime = edge.command_start_time_
+		//}
 	}
 
 	if !this.plan_.EdgeFinished(edge, kEdgeSucceeded, err) {
@@ -582,8 +581,8 @@ func (this *Builder) FinishCommand(result *Result, err *string) bool {
 			panic("should have been rejected by parser")
 		}
 		for _, o := range edge.outputs_ {
-			var deps_mtime TimeStamp = this.disk_interface_.Stat(o.path(), err)
-			if deps_mtime == -1 {
+			deps_mtime, _, err1 := this.disk_interface_.Stat(o.path())
+			if err1 != nil {
 				return false
 			}
 			if !this.scan_.deps_log().RecordDeps(o, deps_mtime, deps_nodes, err) {

@@ -4,7 +4,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,23 +45,19 @@ func AreLongPathsEnabled() bool {
 
 // / stat() a file, returning the mtime, or 0 if missing and -1 on
 // / other errors.
-func (this *RealDiskInterface) Stat(path string, err *string) TimeStamp {
+func (this *RealDiskInterface) Stat(path string) (mtime TimeStamp, notExist bool, err error) {
 	METRIC_RECORD("node stat")
 	// MSDN: "Naming Files, Paths, and Namespaces"
 	// http://msdn.microsoft.com/en-us/library/windows/desktop/aa365247(v=vs.85).aspx
 	if path != "" && !AreLongPathsEnabled() && path[0] != '\\' && len(path) > syscall.MAX_PATH {
-		tmp := fmt.Sprintf("Stat(%s): Filename longer than %d characters", path, syscall.MAX_PATH)
-		*err = tmp
-		return -1
+		return -1, true, fmt.Errorf("Stat(%s): Filename longer than %d characters", path, syscall.MAX_PATH)
 	}
-	var err1 error
-	path, err1 = filepath.Abs(path)
-	if err1 != nil {
-		*err = err1.Error()
-		return -1
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return -1, true, err
 	}
 	if !this.use_cache_ {
-		return StatSingleFile(path, this.BuildDir, err)
+		return StatSingleFile(path, this.BuildDir)
 	}
 
 	dir := DirName(path)
@@ -83,64 +78,61 @@ func (this *RealDiskInterface) Stat(path string, err *string) TimeStamp {
 		ci_second = make(map[string]TimeStamp)
 		this.cache_[dir_lowercase] = ci_second
 		if dir == "" {
-			if !StatAllFilesInDir(".", this.BuildDir, &ci_second, err) {
+			if ok, err := StatAllFilesInDir(".", this.BuildDir, &ci_second); !ok {
 				delete(this.cache_, dir_lowercase)
-				return -1
+				return -1, true, err
 			}
 		} else {
-			if !StatAllFilesInDir(dir, this.BuildDir, &ci_second, err) {
+			if ok, err := StatAllFilesInDir(dir, this.BuildDir, &ci_second); !ok {
 				delete(this.cache_, dir_lowercase)
-				return -1
+				return -1, true, err
 			}
 		}
 
 	}
 	di_second, ok := ci_second[base]
 	if ok {
-		return di_second
+		return di_second, false, nil
 	} else {
-		return 0
+		return 0, true, nil
 	}
 }
 
-func StatSingleFile(path, prefix string, err *string) TimeStamp {
-	mtime := DirHash(path, prefix, err)
-	if *err != "" {
-		return -1
+func StatSingleFile(path, prefix string) (mtime TimeStamp, notExist bool, err error) {
+	mtime, notExist, err = DirHash(path, prefix)
+	if err != nil {
+		return TimeStamp(-1), notExist, err
 	}
-	return TimeStamp(mtime)
+	return mtime, notExist, nil
 }
 
 // StatAllFilesInDir 遍历目录中的所有文件，并填充时间戳映射
-func StatAllFilesInDir(dir, prefix string, stamps *DirCache, err1 *string) bool {
+func StatAllFilesInDir(dir, prefix string, stamps *DirCache) (bool, error) {
 	_, err := os.Stat(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return true // 对应于 C++ 中的 ERROR_FILE_NOT_FOUND 或 ERROR_PATH_NOT_FOUND
+			return true, nil // 对应于 C++ 中的 ERROR_FILE_NOT_FOUND 或 ERROR_PATH_NOT_FOUND
 		} // || os.IsPermission(err)
-		*err1 = fmt.Errorf("ReadDir(%s): %w", dir, err).Error()
-		return false
+		return false, err
 	}
 	files, err := os.ReadDir(dir)
 	if err != nil {
-		*err1 = fmt.Errorf("ReadDir(%s): %w", dir, err).Error()
-		return false
+		return false, err
 	}
 	for _, file := range files {
 		info, err := file.Info()
 		if err != nil {
-			*err1 = fmt.Errorf("Stat(%s): %w", dir, err).Error()
-			return false
+			return false, err
 		}
 		lowerName := strings.ToLower(info.Name())
-		mtime := DirHash(filepath.Join(dir, info.Name()), prefix, err1)
-		if *err1 != "" {
-			return false
+		mtime, _, err := DirHash(filepath.Join(dir, info.Name()), prefix)
+		if err != nil {
+			return false, err
 		}
 		(*stamps)[lowerName] = TimeStamp(mtime)
 	}
 	if err != nil {
-		log.Printf("walk error [%v]\n", err)
+		return false, err
 	}
-	return true
+	return true, nil
 }

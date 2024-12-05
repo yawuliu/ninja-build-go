@@ -20,11 +20,12 @@ func NewNode(path string, slash_bits uint64) *Node {
 
 // / Return false on error.
 func (this *Node) Stat(disk_interface DiskInterface, err *string) bool {
-	this.mtime_ = disk_interface.Stat(this.path_, err)
-	if this.mtime_ == -1 {
+	mtime, notExist, err1 := disk_interface.Stat(this.path_)
+	this.mtime_ = mtime
+	if err1 != nil {
 		return false
 	}
-	if this.mtime_ != 0 {
+	if !notExist {
 		this.exists_ = ExistenceStatusExists
 	} else {
 		this.exists_ = ExistenceStatusMissing
@@ -540,7 +541,7 @@ func (this *DependencyScan) RecomputeNodeDirty(node *Node,
 				this.explanations_.Record(node, "%s is dirty", (*i).path())
 				dirty = true
 			} else {
-				if most_recent_input == nil || i.mtime() > most_recent_input.mtime() {
+				if most_recent_input == nil || i.mtime() != most_recent_input.mtime() {
 					most_recent_input = i
 				}
 			}
@@ -655,23 +656,23 @@ func (this *DependencyScan) RecomputeOutputDirty(edge *Edge, most_recent_input *
 	// an input changed since the last run, so we'll skip checking the
 	// output file's actual mtime and simply check the recorded mtime from
 	// the log against the most recent input's mtime (see below)
-	used_restat := false
-	if edge.GetBindingBool("restat") && this.build_log() != nil {
-		entry = this.build_log().LookupByOutput(this.Config_, output.path())
-		if entry != nil {
-			used_restat = true
-		}
-	}
+	//used_restat := false
+	//if edge.GetBindingBool("restat") && this.build_log() != nil {
+	//	entry = this.build_log().LookupByOutput(this.Config_, output.path())
+	//	if entry != nil {
+	//		used_restat = true
+	//	}
+	//}
 
 	// Dirty if the output is older than the input.
-	if !used_restat && most_recent_input != nil && output.mtime() < most_recent_input.mtime() {
-		this.explanations_.Record(output,
-			"output %s older than most recent input %s (%d vs %d)",
-			output.path(),
-			most_recent_input.path(), output.mtime(),
-			most_recent_input.mtime())
-		return true
-	}
+	//if !used_restat && most_recent_input != nil && output.mtime() != most_recent_input.mtime() {
+	//	this.explanations_.Record(output,
+	//		"output %s older than most recent input %s (%d vs %d)",
+	//		output.path(),
+	//		most_recent_input.path(), output.mtime(),
+	//		most_recent_input.mtime())
+	//	return true
+	//}
 
 	if this.build_log() != nil {
 		generator := edge.GetBindingBool("generator")
@@ -688,20 +689,20 @@ func (this *DependencyScan) RecomputeOutputDirty(edge *Edge, most_recent_input *
 				this.explanations_.Record(output, "command line changed for %s", output.path())
 				return true
 			}
-			if most_recent_input != nil && entry.mtime < most_recent_input.mtime() {
-				// May also be dirty due to the mtime in the log being older than the
-				// mtime of the most recent input.  This can occur even when the mtime
-				// on disk is newer if a previous run wrote to the output file but
-				// exited with an error or was interrupted. If this was a restat rule,
-				// then we only check the recorded mtime against the most recent input
-				// mtime and ignore the actual output's mtime above.
-				this.explanations_.Record(
-					output,
-					"recorded mtime of %s older than most recent input %s (%d vs %d)",
-					output.path(), most_recent_input.path(),
-					entry.mtime, most_recent_input.mtime())
-				return true
-			}
+			//if most_recent_input != nil && entry.mtime != most_recent_input.mtime() {
+			//	// May also be dirty due to the mtime in the log being older than the
+			//	// mtime of the most recent input.  This can occur even when the mtime
+			//	// on disk is newer if a previous run wrote to the output file but
+			//	// exited with an error or was interrupted. If this was a restat rule,
+			//	// then we only check the recorded mtime against the most recent input
+			//	// mtime and ignore the actual output's mtime above.
+			//	this.explanations_.Record(
+			//		output,
+			//		"recorded mtime of %s older than most recent input %s (%d vs %d)",
+			//		output.path(), most_recent_input.path(),
+			//		entry.mtime, most_recent_input.mtime())
+			//	return true
+			//}
 		}
 		if entry == nil && !generator {
 			this.explanations_.Record(output, "command line not found in log for %s",

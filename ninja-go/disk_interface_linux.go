@@ -5,10 +5,9 @@ package main
 import (
 	"fmt"
 	"os"
-	"syscall"
 )
 
-func (this *RealDiskInterface) Stat(path string, err1 *string) TimeStamp {
+func (this *RealDiskInterface) Stat(path, prefix string, err1 *string) TimeStamp {
 	METRIC_RECORD("node stat")
 	var st syscall.Stat_t
 
@@ -22,12 +21,10 @@ func (this *RealDiskInterface) Stat(path string, err1 *string) TimeStamp {
 		return -1
 	}
 
-	// 将最后修改时间转换为纳秒
-	mtime := st.Mtim.Sec*1e9 + st.Mtim.Nsec
-
-	// 有些系统（如Flatpak）可能将mtime设置为0，这里我们返回1以避免与不存在的返回值冲突
-	if mtime == 0 {
-		return 1
+	if info.IsDir() {
+		return HashDirectory(path, prefix)
+	} else {
+		return HashSingleFile(path, prefix)
 	}
 
 	return TimeStamp(mtime)

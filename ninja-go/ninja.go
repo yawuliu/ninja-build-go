@@ -82,14 +82,14 @@ type NinjaMain struct {
 	StartTimeMillis int64
 }
 
-func NewNinjaMain(ninja_command string, config *BuildConfig) *NinjaMain {
+func NewNinjaMain(ninja_command, prefixDir string, config *BuildConfig) *NinjaMain {
 	ret := NinjaMain{}
 	ret.NinjaCommand = ninja_command
 	ret.Config_ = config
 	ret.StartTimeMillis = GetTimeMillis()
 	ret.State_ = NewState()
 	ret.BuildLog = NewBuildLog()
-	ret.DiskInterface = NewRealDiskInterface()
+	ret.DiskInterface = NewRealDiskInterface(prefixDir)
 	return &ret
 }
 

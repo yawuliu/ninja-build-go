@@ -2,10 +2,10 @@ package main
 
 import (
 	"crypto/tls"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/segmentio/fasthash/fnv1a"
 	"github.com/zeebo/blake3"
 	"golang.org/x/mod/sumdb/dirhash"
 	"io"
@@ -17,52 +17,93 @@ import (
 	"strings"
 )
 
-func HashSingleFile(path, prefix string) (string, error) {
-	file := strings.TrimPrefix(path, prefix)
-	h := blake3.New()
-	r, err := os.Open(file)
-	if err != nil {
-		return "", err
-	}
-	hf := blake3.New()
-	_, err = io.Copy(hf, r)
-	r.Close()
-	if err != nil {
-		return "", err
-	}
-	fmt.Fprintf(h, "%x  %s\n", hf.Sum(nil), file)
-	return base64.StdEncoding.EncodeToString(h.Sum(nil)), nil
-}
-
-func HashBlake3(files []string, open func(string) (io.ReadCloser, error)) (string, error) {
+func Hash1(files []string, prefix string, open func(string) (io.ReadCloser, error)) ([]byte, error) {
 	h := blake3.New()
 	files = append([]string(nil), files...)
 	sort.Strings(files)
 	for _, file := range files {
 		if strings.Contains(file, "\n") {
-			return "", errors.New("dirhash: filenames with newlines are not supported")
+			return nil, errors.New("dirhash: filenames with newlines are not supported")
 		}
 		r, err := open(file)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 		hf := blake3.New()
 		_, err = io.Copy(hf, r)
 		r.Close()
 		if err != nil {
-			return "", err
+			return nil, err
 		}
-		fmt.Fprintf(h, "%x  %s\n", hf.Sum(nil), file)
+		fmt.Fprintf(h, "%x  %s\n", hf.Sum(nil), strings.TrimPrefix(file, prefix))
 	}
-	return "h1:" + base64.StdEncoding.EncodeToString(h.Sum(nil)), nil
+	return h.Sum(nil), nil
 }
 
-func HashDirectory(path, prefix string) (string, error) {
-	hash, err := dirhash.HashDir(path, prefix, HashBlake3)
+func hashFile(path, prefix string) ([]byte, error) {
+	file := strings.TrimPrefix(path, prefix)
+	h := blake3.New()
+	r, err := os.Open(path)
 	if err != nil {
-		return "", err
+		return nil, err
+	}
+	hf := blake3.New()
+	_, err = io.Copy(hf, r)
+	r.Close()
+	if err != nil {
+		return nil, err
+	}
+	fmt.Fprintf(h, "f: %x %s\n", hf.Sum(nil), file)
+	return h.Sum(nil), nil
+}
+
+type HashFunc func(files []string, prefix string, open func(string) (io.ReadCloser, error)) ([]byte, error)
+
+func hashDir(dir, prefix string, hash HashFunc) ([]byte, error) {
+	files, err := dirhash.DirFiles(dir, prefix)
+	if err != nil {
+		return nil, err
+	}
+	osOpen := func(name string) (io.ReadCloser, error) {
+		return os.Open(name) // filepath.Join(dir, strings.TrimPrefix(name, prefix))
+	}
+	return hash(files, prefix, osOpen)
+}
+
+func hashDirectory(path, prefix string) ([]byte, error) {
+	hash, err := hashDir(path, prefix, Hash1)
+	if err != nil {
+		return nil, err
 	}
 	return hash, nil
+}
+
+func DirHash(path, prefix string, err1 *string) int64 {
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) || os.IsPermission(err) {
+			return 0 // 对应于 C++ 中的 ERROR_FILE_NOT_FOUND 或 ERROR_PATH_NOT_FOUND
+		}
+		*err1 = err.Error()
+		return -1
+	}
+	h2 := fnv1a.Init64
+	if info.IsDir() {
+		hash, err := hashDirectory(path, prefix)
+		if err != nil {
+			*err1 = err.Error()
+			return -1
+		}
+		h2 = fnv1a.AddBytes64(h2, hash)
+	} else {
+		hash, err := hashFile(path, prefix)
+		if err != nil {
+			*err1 = err.Error()
+			return -1
+		}
+		h2 = fnv1a.AddBytes64(h2, hash)
+	}
+	return int64(h2)
 }
 
 type RbeLogEntry struct {
@@ -113,7 +154,7 @@ func (this *BuildLog) LookupByOutputRbe(rbeService, rbeInstance, path, commandHa
 		log.Println(err)
 		return nil
 	}
-	commandHash, err := strconv.ParseInt(ret.CommandHash, 16, 64)
+	iCommandHash, err := strconv.ParseInt(ret.CommandHash, 16, 64)
 	if err != nil {
 		log.Println(err)
 		return nil
@@ -128,7 +169,7 @@ func (this *BuildLog) LookupByOutputRbe(rbeService, rbeInstance, path, commandHa
 		log.Println(err)
 		return nil
 	}
-	ucommandHash := uint64(commandHash)
+	ucommandHash := uint64(iCommandHash)
 	istartTime := int(startTime)
 	iendTime := int(endTime)
 	mtime, err := strconv.ParseInt(ret.Mtime, 10, 64)

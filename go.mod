@@ -9,6 +9,7 @@ require (
 	github.com/fatih/color v1.18.0
 	github.com/go-co-op/gocron/v2 v2.12.4
 	github.com/mikoim/go-loadavg v0.0.0-20150917074714-35ece5f6d547
+	github.com/segmentio/fasthash v1.0.3
 	github.com/tevino/abool/v2 v2.1.0
 	github.com/valyala/fasthttp v1.57.0
 	github.com/zeebo/blake3 v0.2.4

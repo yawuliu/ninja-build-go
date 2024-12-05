@@ -61,7 +61,7 @@ func real_main(args []string) error {
 	// Limit number of rebuilds, to prevent infinite loops.
 	kCycleLimit := 100
 	for cycle := 1; cycle <= kCycleLimit; cycle++ {
-		ninjaMain = NewNinjaMain(ninja_command, config)
+		ninjaMain = NewNinjaMain(ninja_command, options.WorkingDir, config)
 
 		parser_opts := NewManifestParserOptions()
 		if options.PhonyCycleShouldErr {

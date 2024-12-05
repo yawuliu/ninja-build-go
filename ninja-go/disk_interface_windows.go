@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
 	"unsafe"
 )
 
@@ -56,8 +55,14 @@ func (this *RealDiskInterface) Stat(path string, err *string) TimeStamp {
 		*err = tmp
 		return -1
 	}
+	var err1 error
+	path, err1 = filepath.Abs(path)
+	if err1 != nil {
+		*err = err1.Error()
+		return -1
+	}
 	if !this.use_cache_ {
-		return StatSingleFile(path, err)
+		return StatSingleFile(path, this.BuildDir, err)
 	}
 
 	dir := DirName(path)
@@ -78,12 +83,12 @@ func (this *RealDiskInterface) Stat(path string, err *string) TimeStamp {
 		ci_second = make(map[string]TimeStamp)
 		this.cache_[dir_lowercase] = ci_second
 		if dir == "" {
-			if !StatAllFilesInDir(".", &ci_second, err) {
+			if !StatAllFilesInDir(".", this.BuildDir, &ci_second, err) {
 				delete(this.cache_, dir_lowercase)
 				return -1
 			}
 		} else {
-			if !StatAllFilesInDir(dir, &ci_second, err) {
+			if !StatAllFilesInDir(dir, this.BuildDir, &ci_second, err) {
 				delete(this.cache_, dir_lowercase)
 				return -1
 			}
@@ -98,31 +103,16 @@ func (this *RealDiskInterface) Stat(path string, err *string) TimeStamp {
 	}
 }
 
-func StatSingleFile(path string, err *string) TimeStamp {
-	fileInfo, err1 := os.Stat(path)
-	if err1 != nil {
-		if os.IsNotExist(err1) || os.IsPermission(err1) {
-			return 0 // 对应于 C++ 中的 ERROR_FILE_NOT_FOUND 或 ERROR_PATH_NOT_FOUND
-		}
-		*err = fmt.Errorf("GetFileAttributesEx(%s): %v", path, err1).Error()
+func StatSingleFile(path, prefix string, err *string) TimeStamp {
+	mtime := DirHash(path, prefix, err)
+	if *err != "" {
 		return -1
 	}
-	return TimeStampFromFileTime(fileInfo.ModTime())
-}
-
-// TimeStampFromFileTime 将 FILETIME 结构转换为 Unix 时间戳
-func TimeStampFromFileTime(filetime time.Time) TimeStamp {
-	ft := syscall.NsecToFiletime(filetime.UnixNano())
-	// FILETIME is in 100-nanosecond increments since the Windows epoch.
-	// We don't much care about epoch correctness but we do want the
-	// resulting value to fit in a 64-bit integer.
-	mtime := (uint64(ft.HighDateTime) << 32) | (uint64(ft.LowDateTime))
-	// 1600 epoch -> 2000 epoch (subtract 400 years).
-	return TimeStamp(mtime - uint64(12622770400)*uint64(1000000000/100))
+	return TimeStamp(mtime)
 }
 
 // StatAllFilesInDir 遍历目录中的所有文件，并填充时间戳映射
-func StatAllFilesInDir(dir string, stamps *DirCache, err1 *string) bool {
+func StatAllFilesInDir(dir, prefix string, stamps *DirCache, err1 *string) bool {
 	_, err := os.Stat(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -143,7 +133,11 @@ func StatAllFilesInDir(dir string, stamps *DirCache, err1 *string) bool {
 			return false
 		}
 		lowerName := strings.ToLower(info.Name())
-		(*stamps)[lowerName] = TimeStampFromFileTime(info.ModTime())
+		mtime := DirHash(filepath.Join(dir, info.Name()), prefix, err1)
+		if *err1 != "" {
+			return false
+		}
+		(*stamps)[lowerName] = TimeStamp(mtime)
 	}
 	if err != nil {
 		log.Printf("walk error [%v]\n", err)

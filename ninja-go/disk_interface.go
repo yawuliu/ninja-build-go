@@ -24,6 +24,8 @@ type RealDiskInterface struct {
 	// TODO: Neither a map nor a hashmap seems ideal here.  If the statcache
 	// works out, come up with a better data structure.
 	cache_ Cache
+
+	BuildDir string
 }
 
 type FileReader interface {
@@ -80,11 +82,12 @@ func (this *RealDiskInterface) MakeDirs(path string, err1 *string) bool {
 	return this.MakeDir(dir)
 }
 
-func NewRealDiskInterface() *RealDiskInterface {
+func NewRealDiskInterface(buildDir string) *RealDiskInterface {
 	ret := RealDiskInterface{}
 	ret.use_cache_ = false
 	ret.long_paths_enabled_ = false
 	ret.cache_ = make(map[string]DirCache)
+	ret.BuildDir = buildDir
 	return &ret
 }
 func (this *RealDiskInterface) ReleaseRealDiskInterface() {}

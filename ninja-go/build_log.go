@@ -203,9 +203,9 @@ func (this *BuildLog) Load(path string, err1 *string) LoadStatus {
 
 // / Lookup a previously-run command by its output path.
 func (this *BuildLog) LookupByOutput(config *BuildConfig, path string) *LogEntry {
-	if config.RbeService != "" {
-		this.LookupByOutputRbe(config.RbeService, config.RbeInstance, path)
-	}
+	//if config.RbeService != "" {
+	//	this.LookupByOutputRbe(config.RbeService, config.RbeInstance, path)
+	//}
 	i, ok := this.entries_[path]
 	if ok {
 		return i

@@ -72,8 +72,8 @@ func HandleQuery(ctx *fasthttp.RequestCtx) {
 	instance := string(ctx.QueryArgs().Peek("instance"))
 	output := string(ctx.QueryArgs().Peek("output"))
 	commandHash := string(ctx.QueryArgs().Peek("command_hash"))
-	// mtime := string(ctx.QueryArgs().Peek("mtime"))
-	found, err := FindCommandHashLastMtime(output, instance, commandHash)
+	mtime := string(ctx.QueryArgs().Peek("mtime"))
+	found, err := FindCommandHashAndMtime(output, instance, commandHash, mtime)
 	if err != nil {
 		ctx.Error(err.Error(), fasthttp.StatusInternalServerError)
 		return

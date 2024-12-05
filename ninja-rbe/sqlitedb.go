@@ -41,7 +41,7 @@ func OpenDb(dbPath string) (err error) {
 			"`output` TEXT, `command_hash` TEXT, `mtime` TEXT, `start_time` TEXT, `end_time` TEXT," +
 			"`instance` TEXT, `created_at` INTEGER, `last_access` INTEGER, `expired_duration` INTEGER," +
 			"`deleted` INTEGER," +
-			" UNIQUE (`command_hash`, `output`,  `instance`, `deleted`) ON CONFLICT REPLACE " +
+			" UNIQUE (`command_hash`, `mtime`, `output`,  `instance`, `deleted`) ON CONFLICT REPLACE " +
 			");")
 		if err != nil {
 			return err
@@ -61,7 +61,7 @@ func OpenDb(dbPath string) (err error) {
 		return err
 	}
 	stmtFindRowByKey, err = conn.Prepare("SELECT * FROM log_entry " +
-		"WHERE `command_hash` = $command_hash AND `instance` = $instance " +
+		"WHERE `command_hash` = $command_hash AND `mtime` = $mtime AND `instance` = $instance " +
 		"AND `output` =$output AND `deleted` = 0 ORDER BY `mtime` DESC LIMIT 1;")
 	if err != nil {
 		return err
@@ -139,9 +139,10 @@ func UpdateFileAccess(id int64) error {
 	return nil
 }
 
-func FindCommandHashLastMtime(output, instance, command_hash string) (*RbeLogEntry, error) {
+func FindCommandHashAndMtime(output, instance, command_hash, mtime string) (*RbeLogEntry, error) {
 	defer stmtFindRowByKey.Reset()
 	stmtFindRowByKey.SetText("$command_hash", command_hash)
+	stmtFindRowByKey.SetText("$mtime", mtime)
 	stmtFindRowByKey.SetText("$output", output)
 	stmtFindRowByKey.SetText("$instance", instance)
 	for {
@@ -155,7 +156,7 @@ func FindCommandHashLastMtime(output, instance, command_hash string) (*RbeLogEnt
 		id := stmtFindRowByKey.GetInt64("id")
 		// output := stmtFindRowByKey.GetText("output")
 		// command_hash := stmtFindRowByKey.GetText("command_hash")
-		mtime := stmtFindRowByKey.GetText("mtime")
+		// mtime := stmtFindRowByKey.GetText("mtime")
 		start_time := stmtFindRowByKey.GetText("start_time")
 		end_time := stmtFindRowByKey.GetText("end_time")
 		// instance := stmtFindRowByKey.GetText("instance")

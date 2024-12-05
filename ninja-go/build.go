@@ -45,10 +45,17 @@ type BuildConfig struct {
 	/// means that we do not have any limit.
 	MaxLoadAverage       float64
 	DepfileParserOptions *DepfileParserOptions
+	/// RBE Service
+	RbeService string
+	// RBE Instance
+	RbeInstance string
 }
 
 func NewBuildConfig() *BuildConfig {
-	ret := BuildConfig{Verbosity: NORMAL, DryRun: false, Parallelism: 1, FailuresAllowed: 1, MaxLoadAverage: -0.0}
+	ret := BuildConfig{Verbosity: NORMAL, DryRun: false,
+		Parallelism: 1, FailuresAllowed: 1,
+		MaxLoadAverage: -0.0, RbeInstance: "main",
+	}
 	return &ret
 }
 
@@ -189,7 +196,7 @@ func NewBuilder(state *State, config *BuildConfig, build_log *BuildLog,
 		ret.explanations_ = NewOptionalExplanations()
 	}
 	ret.scan_ = NewDependencyScan(state, build_log, deps_log, disk_interface,
-		ret.config_.DepfileParserOptions, ret.explanations_)
+		ret.config_.DepfileParserOptions, ret.explanations_, config)
 	ret.lock_file_path_ = ".ninja_lock"
 	build_dir := ret.state_.bindings_.LookupVariable("builddir")
 	if build_dir != "" {

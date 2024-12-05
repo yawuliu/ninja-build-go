@@ -93,6 +93,11 @@ func NewNinjaMain(ninja_command string, config *BuildConfig) *NinjaMain {
 	return &ret
 }
 
+func (this *NinjaMain) Release() {
+	this.BuildLog.ReleaseBuildLog()
+	this.DiskInterface.ReleaseRealDiskInterface()
+}
+
 func (this *NinjaMain) EnsureBuildDirExists() bool {
 	this.BuildDir = this.State_.bindings_.LookupVariable("builddir")
 	if this.BuildDir != "" && !this.Config_.DryRun {
@@ -287,7 +292,7 @@ func (this *NinjaMain) RebuildManifest(input_file string, err *string, status St
 func (this *NinjaMain) ParsePreviousElapsedTimes() {
 	for _, edge := range this.State_.edges_ {
 		for _, out := range edge.outputs_ {
-			log_entry := this.BuildLog.LookupByOutput(out.path())
+			log_entry := this.BuildLog.LookupByOutput(this.Config_, out.path())
 			if log_entry == nil {
 				continue // Maybe we'll have log entry for next output of this edge?
 			}
@@ -436,7 +441,7 @@ func ReadFlags(args *[]string, options *Options, config *BuildConfig) int {
 	//  { "", 0, nil, 0 },
 	//}
 
-	opts, optind, err := getopt.Getopts(*args, "d:f:j:k:l:nt:vw:C:h")
+	opts, optind, err := getopt.Getopts(*args, "d:f:j:k:l:nt:vw:C:h:r:R")
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -452,6 +457,10 @@ func ReadFlags(args *[]string, options *Options, config *BuildConfig) int {
 			}
 		case 'f':
 			options.InputFile = optarg
+		case 'r':
+			config.RbeService = optarg
+		case 'R':
+			config.RbeInstance = optarg
 		case 'j':
 			{
 				value, err := strconv.Atoi(optV.Value)

@@ -137,6 +137,7 @@ type DependencyScan struct {
 	dep_loader_     *ImplicitDepLoader
 	dyndep_loader_  *DyndepLoader
 	explanations_   Explanations
+	Config_         *BuildConfig
 }
 
 type ImplicitDepLoader struct {

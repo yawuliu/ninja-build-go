@@ -37,7 +37,7 @@ func HandleUpload(ctx *fasthttp.RequestCtx) {
 	startTime := string(ctx.FormValue("start_time"))
 	endTime := string(ctx.FormValue("end_time"))
 	mtime := string(ctx.FormValue("mtime"))
-	instance_id := string(ctx.FormValue("instance_id"))
+	instance := string(ctx.FormValue("instance"))
 	expired_duration := string(ctx.FormValue("expired_duration"))
 	header, err := ctx.FormFile("file")
 	if err != nil {
@@ -58,7 +58,8 @@ func HandleUpload(ctx *fasthttp.RequestCtx) {
 		ctx.Error(err.Error(), fasthttp.StatusInternalServerError)
 		return
 	}
-	err = InsertLogEntry(output, commandHash, startTime, endTime, mtime, instance_id, expired_duration)
+	err = InsertLogEntry(output, commandHash, startTime, endTime, mtime,
+		instance, expired_duration)
 	if err != nil {
 		ctx.Error(err.Error(), fasthttp.StatusInternalServerError)
 		return
@@ -68,9 +69,11 @@ func HandleUpload(ctx *fasthttp.RequestCtx) {
 
 func HandleQuery(ctx *fasthttp.RequestCtx) {
 	ctx.Response.Reset()
+	instance := string(ctx.QueryArgs().Peek("instance"))
+	output := string(ctx.QueryArgs().Peek("output"))
 	commandHash := string(ctx.QueryArgs().Peek("command_hash"))
-	mtime := string(ctx.QueryArgs().Peek("mtime"))
-	found, err := FindCommandHashAndMtime(commandHash, mtime)
+	// mtime := string(ctx.QueryArgs().Peek("mtime"))
+	found, err := FindCommandHashLastMtime(output, instance, commandHash)
 	if err != nil {
 		ctx.Error(err.Error(), fasthttp.StatusInternalServerError)
 		return
@@ -153,6 +156,7 @@ func ServeFiles(addr, rootDir string, compress, byteRange, generateIndexPages, v
 
 func shutdown(ctx context.Context) {
 	CloseDb()
+	StopScheduler()
 	err := fsServer.ShutdownWithContext(ctx)
 	if err != nil {
 		log.Println(err)

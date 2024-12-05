@@ -29,6 +29,7 @@ func main() {
 		panic(err)
 	}
 	go ServeFiles(*addr, *dir, *compress, *byteRange, *generateIndexPages, *vhost)
+	go StartExpiredCleanSchedule()
 	// Make a signal channel. Register SIGINT.
 	sigch := make(chan os.Signal, 1)
 	signal.Notify(sigch, os.Interrupt)

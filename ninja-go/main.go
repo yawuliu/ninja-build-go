@@ -12,8 +12,14 @@ func TerminateHandler() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	s := <-quit
+
 	fmt.Println("terminate handler called:", s)
+	if ninjaMain != nil {
+		ninjaMain.Release()
+	}
 }
+
+var ninjaMain *NinjaMain = nil
 
 func real_main(args []string) error {
 	config := NewBuildConfig()
@@ -55,13 +61,13 @@ func real_main(args []string) error {
 	// Limit number of rebuilds, to prevent infinite loops.
 	kCycleLimit := 100
 	for cycle := 1; cycle <= kCycleLimit; cycle++ {
-		ninja := NewNinjaMain(ninja_command, config)
+		ninjaMain = NewNinjaMain(ninja_command, config)
 
 		parser_opts := NewManifestParserOptions()
 		if options.PhonyCycleShouldErr {
 			parser_opts.PhonyCycleAction = KPhonyCycleActionError
 		}
-		parser := NewManifestParser(ninja.State_, ninja.DiskInterface, parser_opts)
+		parser := NewManifestParser(ninjaMain.State_, ninjaMain.DiskInterface, parser_opts)
 		var err string
 		if !parser.Load(options.InputFile, &err, nil) {
 			status.Error("%s", err)
@@ -72,11 +78,11 @@ func real_main(args []string) error {
 			os.Exit(options.Tool.Func1(&options, &args))
 		}
 
-		if !ninja.EnsureBuildDirExists() {
+		if !ninjaMain.EnsureBuildDirExists() {
 			os.Exit(1)
 		}
 
-		if !ninja.OpenBuildLog(false) || !ninja.OpenDepsLog(false) {
+		if !ninjaMain.OpenBuildLog(false) || !ninjaMain.OpenDepsLog(false) {
 			os.Exit(1)
 		}
 
@@ -85,7 +91,7 @@ func real_main(args []string) error {
 		}
 
 		// Attempt to rebuild the manifest before building anything else
-		if ninja.RebuildManifest(options.InputFile, &err, status) {
+		if ninjaMain.RebuildManifest(options.InputFile, &err, status) {
 			// In dry_run mode the regeneration will succeed without changing the
 			// manifest forever. Better to return immediately.
 			if config.DryRun {
@@ -98,11 +104,11 @@ func real_main(args []string) error {
 			os.Exit(1)
 		}
 
-		ninja.ParsePreviousElapsedTimes()
+		ninjaMain.ParsePreviousElapsedTimes()
 
-		result := ninja.RunBuild(&args, status)
+		result := ninjaMain.RunBuild(&args, status)
 		if GMetrics != nil {
-			ninja.DumpMetrics()
+			ninjaMain.DumpMetrics()
 		}
 		os.Exit(result)
 	}

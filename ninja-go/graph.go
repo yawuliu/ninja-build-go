@@ -338,13 +338,14 @@ func (this *Edge) maybe_phonycycle_diagnostic() bool {
 }
 
 func NewDependencyScan(state *State, build_log *BuildLog, deps_log *DepsLog, disk_interface DiskInterface,
-	depfile_parser_options *DepfileParserOptions, explanations Explanations) *DependencyScan {
+	depfile_parser_options *DepfileParserOptions, explanations Explanations, config *BuildConfig) *DependencyScan {
 	ret := DependencyScan{}
 	ret.build_log_ = build_log
 	ret.disk_interface_ = disk_interface
 	ret.dep_loader_ = NewImplicitDepLoader(state, deps_log, disk_interface, depfile_parser_options, explanations)
 	ret.dyndep_loader_ = NewDyndepLoader(state, disk_interface, nil)
 	ret.explanations_ = explanations
+	ret.Config_ = config
 	return &ret
 }
 
@@ -656,7 +657,7 @@ func (this *DependencyScan) RecomputeOutputDirty(edge *Edge, most_recent_input *
 	// the log against the most recent input's mtime (see below)
 	used_restat := false
 	if edge.GetBindingBool("restat") && this.build_log() != nil {
-		entry = this.build_log().LookupByOutput(output.path())
+		entry = this.build_log().LookupByOutput(this.Config_, output.path())
 		if entry != nil {
 			used_restat = true
 		}
@@ -676,7 +677,7 @@ func (this *DependencyScan) RecomputeOutputDirty(edge *Edge, most_recent_input *
 		generator := edge.GetBindingBool("generator")
 
 		if entry != nil || func() bool {
-			entry = this.build_log().LookupByOutput(output.path())
+			entry = this.build_log().LookupByOutput(this.Config_, output.path())
 			return entry != nil
 		}() {
 			color.Blue("command: %s, hash: %x, mtime: %d", command, HashCommand(command), most_recent_input.mtime())

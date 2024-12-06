@@ -673,21 +673,22 @@ func (this *DependencyScan) RecomputeOutputDirty(edge *Edge, inputs []*Node, com
 
 	if this.build_log() != nil {
 		generator := edge.GetBindingBool("generator")
+		currentMtime, _, err := NodesHash(inputs, this.PrefixDir)
+		currentHash := HashCommand(command)
+		color.Blue("command: %s, currentHash: %x, currentMtime: %d", command, currentHash, currentMtime)
 
 		if entry != nil || func() bool {
-			entry = this.build_log().LookupByOutput(this.Config_, output.path())
+			entry = this.build_log().LookupByOutput(this.Config_, output.path(), currentHash, currentMtime)
 			return entry != nil
 		}() {
-			recent_mtime, _, err := NodesHash(inputs, this.PrefixDir)
-			color.Blue("command: %s, hash: %x, recent_mtime: %d, mtime: %d", command, HashCommand(command), recent_mtime, entry.mtime)
-			if !generator && HashCommand(command) != entry.command_hash {
+			if !generator && currentHash != entry.command_hash {
 				// May also be dirty due to the command changing since the last build.
 				// But if this is a generator rule, the command changing does not make us
 				// dirty.
 				this.explanations_.Record(output, "command line changed for %s", output.path())
 				return true
 			}
-			if err == nil && entry.mtime != recent_mtime {
+			if err == nil && entry.mtime != currentMtime {
 				//	// May also be dirty due to the mtime in the log being older than the
 				//	// mtime of the most recent input.  This can occur even when the mtime
 				//	// on disk is newer if a previous run wrote to the output file but

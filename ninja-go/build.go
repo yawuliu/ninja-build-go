@@ -55,7 +55,9 @@ type BuildConfig struct {
 func NewBuildConfig() *BuildConfig {
 	ret := BuildConfig{Verbosity: NORMAL, DryRun: false,
 		Parallelism: 1, FailuresAllowed: 1,
-		MaxLoadAverage: -0.0, RbeInstance: "main",
+		MaxLoadAverage: -0.0,
+		RbeInstance:    "main",
+		RbeService:     "http://localhost:8080",
 	}
 	return &ret
 }

@@ -3,5 +3,4 @@
 
 void subdir() {
 	printf("subdir\n");
-
 }

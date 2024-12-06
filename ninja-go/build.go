@@ -636,7 +636,7 @@ func (this *Builder) ExtractDeps(result *Result, deps_type string, deps_prefix s
 		}
 
 		deps := NewDepfileParser(this.config_.DepfileParserOptions)
-		if !deps.Parse(content, err) {
+		if !deps.Parse([]byte(content), err) {
 			return false
 		}
 
@@ -644,8 +644,8 @@ func (this *Builder) ExtractDeps(result *Result, deps_type string, deps_prefix s
 		//deps_nodes.reserve(deps.ins_.size());
 		for _, i := range deps.ins_ {
 			var slash_bits uint64 = 0
-			CanonicalizePath(i, &slash_bits)
-			deps_nodes = append(deps_nodes, this.state_.GetNode(*i, slash_bits))
+			CanonicalizePath(&i, &slash_bits)
+			deps_nodes = append(deps_nodes, this.state_.GetNode(i, slash_bits))
 		}
 
 		if !g_keep_depfile {

@@ -185,17 +185,18 @@ func (this *ImplicitDepLoader) deps_log() *DepsLog {
 
 // / Process loaded implicit dependencies for \a edge and update the graph
 // / @return false on error (without filling \a err if info is just missing)
-func (this *ImplicitDepLoader) ProcessDepfileDeps(edge *Edge, depfile_ins []*string, err *string) bool {
+func (this *ImplicitDepLoader) ProcessDepfileDeps(edge *Edge, depfile_ins []string, err *string) bool {
 	// Preallocate space in edge.inputs_ to be filled in below.
 	implicit_dep := this.PreallocateSpace(edge, len(depfile_ins))
 
 	// Add all its in-edges.
-	for index, i := range depfile_ins { // .begin(); i != depfile_ins.end(); ++i, ++implicit_dep)
+	for _, i := range depfile_ins { // .begin(); i != depfile_ins.end(); ++i, ++implicit_dep)
 		slash_bits := uint64(0)
-		CanonicalizePath(i, &slash_bits)
-		node := this.state_.GetNode(*i, slash_bits)
-		implicit_dep[index] = node
+		CanonicalizePath(&i, &slash_bits)
+		node := this.state_.GetNode(i, slash_bits)
+		edge.inputs_[implicit_dep] = node
 		node.AddOutEdge(edge)
+		implicit_dep++
 	}
 
 	return true
@@ -228,7 +229,7 @@ func (this *ImplicitDepLoader) LoadDepFile(edge *Edge, path string, err *string)
 		depfile = NewDepfileParser(NewDepfileParserOptions())
 	}
 	depfile_err := ""
-	if !depfile.Parse(content, &depfile_err) {
+	if !depfile.Parse([]byte(content), &depfile_err) {
 		*err = path + ": " + depfile_err
 		return false
 	}
@@ -240,12 +241,12 @@ func (this *ImplicitDepLoader) LoadDepFile(edge *Edge, path string, err *string)
 
 	unused := uint64(0)
 	primary_out := depfile.outs_[0]
-	CanonicalizePath(primary_out, &unused)
+	CanonicalizePath(&primary_out, &unused)
 
 	// Check that this depfile matches the edge's output, if not return false to
 	// mark the edge as dirty.
 	opath := first_output.path()
-	if opath != *primary_out {
+	if opath != primary_out {
 		this.explanations_.Record(first_output,
 			"expected depfile '%s' to mention '%s', got '%s'",
 			path, first_output.path(),
@@ -256,8 +257,8 @@ func (this *ImplicitDepLoader) LoadDepFile(edge *Edge, path string, err *string)
 	// Ensure that all mentioned outputs are outputs of the edge.
 	for _, o := range depfile.outs_ {
 		for _, node := range edge.outputs_ {
-			if !strings.Contains(node.path(), *o) {
-				*err = path + ": depfile mentions '" + *o + "' as an output, but no such output was declared"
+			if !strings.Contains(node.path(), o) {
+				*err = path + ": depfile mentions '" + o + "' as an output, but no such output was declared"
 				return false
 			}
 		}
@@ -301,8 +302,8 @@ func (this *ImplicitDepLoader) LoadDepsFromLog(edge *Edge, err *string) bool {
 
 // / Preallocate \a count spaces in the input array on \a edge, returning
 // / an iterator pointing at the first new space.
-func (this *ImplicitDepLoader) PreallocateSpace(edge *Edge, count int) []*Node {
-	edge.inputs_ = append(edge.inputs_, make([]*Node, count)...) // ,  count, 0
+func (this *ImplicitDepLoader) PreallocateSpace(edge *Edge, count int) int {
+	edge.inputs_ = append(edge.inputs_, make([]*Node, count-edge.order_only_deps_)...) // ,  count, 0
 	edge.implicit_deps_ += count
-	return edge.inputs_[edge.order_only_deps_ : edge.order_only_deps_+count]
+	return len(edge.inputs_) - edge.order_only_deps_ - count
 }

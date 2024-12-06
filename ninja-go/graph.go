@@ -738,14 +738,17 @@ func NewEdgeEnv(edge *Edge, escape EscapeKind) *EdgeEnv {
 }
 func (this *EdgeEnv) LookupVariable(var1 string) string {
 	if var1 == "in" || var1 == "in_newline" {
+		explicit_deps_count := len(this.edge_.inputs_) - this.edge_.implicit_deps_ -
+			this.edge_.order_only_deps_
 		if var1 == "in" {
-			return this.MakePathList(this.edge_.inputs_, ' ')
+			return this.MakePathList(this.edge_.inputs_, explicit_deps_count, ' ')
 		} else {
-			return this.MakePathList(this.edge_.inputs_, '\n')
+			return this.MakePathList(this.edge_.inputs_, explicit_deps_count, '\n')
 		}
 
 	} else if var1 == "out" {
-		return this.MakePathList(this.edge_.outputs_, ' ')
+		explicit_outs_count := len(this.edge_.outputs_) - this.edge_.implicit_outs_
+		return this.MakePathList(this.edge_.outputs_, explicit_outs_count, ' ')
 	}
 
 	// Technical note about the lookups_ vector.
@@ -812,13 +815,13 @@ func (this *EdgeEnv) LookupVariable(var1 string) string {
 
 // / Given a span of Nodes, construct a list of paths suitable for a command
 // / line.
-func (this *EdgeEnv) MakePathList(spans []*Node, sep uint8) string {
+func (this *EdgeEnv) MakePathList(spans []*Node, size int, sep uint8) string {
 	result := ""
-	for _, i := range spans {
+	for i := 0; i < size; i++ {
 		if result != "" {
 			result += string(sep)
 		}
-		path := i.PathDecanonicalized()
+		path := spans[i].PathDecanonicalized()
 		if this.escape_in_out_ == kShellEscape {
 			GetWin32EscapedString(path, &result)
 		} else {

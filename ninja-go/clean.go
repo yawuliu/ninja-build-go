@@ -1,6 +1,10 @@
 package main
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+	"os"
+)
 
 type Cleaner struct {
 	state_               *State
@@ -31,12 +35,15 @@ func (this *Cleaner) RemoveFile(path string) int {
 }
 
 func (this *Cleaner) FileExists(path string) bool {
-	_, notExist, err := this.disk_interface_.Stat(path)
+	_, err := os.Stat(path)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false
+		}
 		Error("%s", err.Error())
 		return false
 	}
-	return !notExist // Treat Stat() errors as "file does not exist".
+	return true // Treat Stat() errors as "file does not exist".
 }
 
 func (this *Cleaner) Report(path string) {

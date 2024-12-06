@@ -20,8 +20,8 @@ func NewNode(path string, slash_bits uint64) *Node {
 
 // / Return false on error.
 func (this *Node) Stat(disk_interface DiskInterface, err *string) bool {
-	mtime, notExist, err1 := disk_interface.Stat(this.path_)
-	this.mtime_ = mtime
+	mtime, notExist, err1 := disk_interface.StatNode(this)
+	this.mtime_ = mtime // Node in_edge所有文件的Hash, path_也可能存在于远程，in_edge中的文件也可能存在于远程
 	if err1 != nil {
 		return false
 	}
@@ -339,7 +339,7 @@ func (this *Edge) maybe_phonycycle_diagnostic() bool {
 }
 
 func NewDependencyScan(state *State, build_log *BuildLog, deps_log *DepsLog, disk_interface DiskInterface,
-	depfile_parser_options *DepfileParserOptions, explanations Explanations, config *BuildConfig) *DependencyScan {
+	depfile_parser_options *DepfileParserOptions, explanations Explanations, config *BuildConfig, prefixDir string) *DependencyScan {
 	ret := DependencyScan{}
 	ret.build_log_ = build_log
 	ret.disk_interface_ = disk_interface
@@ -347,6 +347,7 @@ func NewDependencyScan(state *State, build_log *BuildLog, deps_log *DepsLog, dis
 	ret.dyndep_loader_ = NewDyndepLoader(state, disk_interface, nil)
 	ret.explanations_ = explanations
 	ret.Config_ = config
+	ret.PrefixDir = prefixDir
 	return &ret
 }
 
@@ -392,10 +393,10 @@ func (this *DependencyScan) RecomputeDirty(initial_node *Node, validation_nodes 
 
 // / Recompute whether any output of the edge is dirty, if so sets |*dirty|.
 // / Returns false on failure.
-func (this *DependencyScan) RecomputeOutputsDirty(edge *Edge, most_recent_input *Node, outputs_dirty *bool, err *string) bool {
+func (this *DependencyScan) RecomputeOutputsDirty(edge *Edge, inputs []*Node, outputs_dirty *bool, err *string) bool {
 	command := edge.EvaluateCommand( /*incl_rsp_file=*/ true)
 	for _, o := range edge.outputs_ {
-		if this.RecomputeOutputDirty(edge, most_recent_input, command, o) {
+		if this.RecomputeOutputDirty(edge, inputs, command, o) {
 			*outputs_dirty = true
 			return true
 		}
@@ -519,7 +520,7 @@ func (this *DependencyScan) RecomputeNodeDirty(node *Node,
 	*validation_nodes = append(*validation_nodes, edge.validations_...)
 
 	// Visit all inputs; we're dirty if any of the inputs are dirty.
-	var most_recent_input *Node = nil
+	var inputs []*Node = edge.inputs_
 	for index, i := range edge.inputs_ {
 		// Visit this input.
 		if !this.RecomputeNodeDirty(i, stack, validation_nodes, err) {
@@ -540,10 +541,6 @@ func (this *DependencyScan) RecomputeNodeDirty(node *Node,
 			if i.dirty() {
 				this.explanations_.Record(node, "%s is dirty", (*i).path())
 				dirty = true
-			} else {
-				if most_recent_input == nil || i.mtime() != most_recent_input.mtime() {
-					most_recent_input = i
-				}
 			}
 		}
 	}
@@ -551,7 +548,7 @@ func (this *DependencyScan) RecomputeNodeDirty(node *Node,
 	// We may also be dirty due to output state: missing outputs, out of
 	// date outputs, etc.  Visit all outputs and determine whether they're dirty.
 	if !dirty {
-		if !this.RecomputeOutputsDirty(edge, most_recent_input, &dirty, err) {
+		if !this.RecomputeOutputsDirty(edge, inputs, &dirty, err) {
 			return false
 		}
 	}
@@ -620,7 +617,7 @@ func (this *DependencyScan) VerifyDAG(node *Node, stack *[]*Node, err *string) b
 
 // / Recompute whether a given single output should be marked dirty.
 // / Returns true if so.
-func (this *DependencyScan) RecomputeOutputDirty(edge *Edge, most_recent_input *Node, command string, output *Node) bool {
+func (this *DependencyScan) RecomputeOutputDirty(edge *Edge, inputs []*Node, command string, output *Node) bool {
 	if edge.is_phony() {
 		// Phony edges don't write any output.  Outputs are only dirty if
 		// there are no inputs and we're missing the output.
@@ -633,8 +630,8 @@ func (this *DependencyScan) RecomputeOutputDirty(edge *Edge, most_recent_input *
 
 		// Update the mtime with the newest input. Dependents can thus call mtime()
 		// on the fake node and get the latest mtime of the dependencies
-		if most_recent_input != nil {
-			output.UpdatePhonyMtime(most_recent_input.mtime())
+		if inputs != nil {
+			output.UpdatePhonyMtime(inputs[0].mtime())
 		}
 
 		// Phony edges are clean, nothing to do
@@ -681,7 +678,8 @@ func (this *DependencyScan) RecomputeOutputDirty(edge *Edge, most_recent_input *
 			entry = this.build_log().LookupByOutput(this.Config_, output.path())
 			return entry != nil
 		}() {
-			color.Blue("command: %s, hash: %x, mtime: %d", command, HashCommand(command), most_recent_input.mtime())
+			recent_mtime, _, err := NodesHash(inputs, this.PrefixDir)
+			color.Blue("command: %s, hash: %x, recent_mtime: %d, mtime: %d", command, HashCommand(command), recent_mtime, entry.mtime)
 			if !generator && HashCommand(command) != entry.command_hash {
 				// May also be dirty due to the command changing since the last build.
 				// But if this is a generator rule, the command changing does not make us
@@ -689,20 +687,20 @@ func (this *DependencyScan) RecomputeOutputDirty(edge *Edge, most_recent_input *
 				this.explanations_.Record(output, "command line changed for %s", output.path())
 				return true
 			}
-			//if most_recent_input != nil && entry.mtime != most_recent_input.mtime() {
-			//	// May also be dirty due to the mtime in the log being older than the
-			//	// mtime of the most recent input.  This can occur even when the mtime
-			//	// on disk is newer if a previous run wrote to the output file but
-			//	// exited with an error or was interrupted. If this was a restat rule,
-			//	// then we only check the recorded mtime against the most recent input
-			//	// mtime and ignore the actual output's mtime above.
-			//	this.explanations_.Record(
-			//		output,
-			//		"recorded mtime of %s older than most recent input %s (%d vs %d)",
-			//		output.path(), most_recent_input.path(),
-			//		entry.mtime, most_recent_input.mtime())
-			//	return true
-			//}
+			if err == nil && entry.mtime != recent_mtime {
+				//	// May also be dirty due to the mtime in the log being older than the
+				//	// mtime of the most recent input.  This can occur even when the mtime
+				//	// on disk is newer if a previous run wrote to the output file but
+				//	// exited with an error or was interrupted. If this was a restat rule,
+				//	// then we only check the recorded mtime against the most recent input
+				//	// mtime and ignore the actual output's mtime above.
+				//this.explanations_.Record(
+				//	output,
+				//	"recorded mtime of %s older than most recent input %s (%d vs %d)",
+				//	output.path(), most_recent_input.path(),
+				//	entry.mtime, most_recent_input.mtime())
+				return true
+			}
 		}
 		if entry == nil && !generator {
 			this.explanations_.Record(output, "command line not found in log for %s",

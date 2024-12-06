@@ -29,7 +29,7 @@ type RealDiskInterface struct {
 }
 
 type FileReader interface {
-	Stat(path string) (mtime TimeStamp, notExist bool, err error)
+	StatNode(node *Node) (mtime TimeStamp, notExist bool, err error)
 	WriteFile(path string, contents string) bool
 	MakeDir(path string) bool
 	MakeDirs(path string, err *string) bool
@@ -40,7 +40,7 @@ type FileReader interface {
 
 type DiskInterface interface {
 	FileReader
-	Stat(path string) (mtime TimeStamp, notExist bool, err error)
+	StatNode(node *Node) (mtime TimeStamp, notExist bool, err error)
 	WriteFile(path string, contents string) bool
 	MakeDir(path string) bool
 	MakeDirs(path string, err *string) bool

@@ -1,14 +1,15 @@
 cc = gcc
 cflags = -Wall
 
-rule cc
-  command = $cc $cflags -c $in -o $out
+rule compile
+  command = $cc $cflags -MMD -MF $out.d -c $in -o $out
+  depfile = $out.d
 
-build main.o: cc main.c
+build main.o: compile main.c
 
-build subdir/a.o: cc subdir/a.c
+build subdir/a.o: compile subdir/a.c
 
-build subdir/subdir1/a.o: cc subdir/subdir1/a.c
+build subdir/subdir1/a.o: compile subdir/subdir1/a.c
 
 rule link
   description = Linking $in

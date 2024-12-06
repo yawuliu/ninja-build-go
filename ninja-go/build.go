@@ -4,6 +4,7 @@ import (
 	"github.com/edwingeng/deque"
 	"log"
 	"math"
+	"os"
 )
 
 type EdgeResult int8
@@ -181,7 +182,7 @@ func (d *DryRunCommandRunner) Abort() {}
 
 func NewBuilder(state *State, config *BuildConfig, build_log *BuildLog,
 	deps_log *DepsLog, disk_interface DiskInterface, status Status,
-	start_time_millis int64) *Builder {
+	start_time_millis int64, prefixDir string) *Builder {
 	ret := Builder{}
 	ret.state_ = state
 	ret.config_ = config
@@ -196,7 +197,7 @@ func NewBuilder(state *State, config *BuildConfig, build_log *BuildLog,
 		ret.explanations_ = NewOptionalExplanations()
 	}
 	ret.scan_ = NewDependencyScan(state, build_log, deps_log, disk_interface,
-		ret.config_.DepfileParserOptions, ret.explanations_, config)
+		ret.config_.DepfileParserOptions, ret.explanations_, config, prefixDir)
 	ret.lock_file_path_ = ".ninja_lock"
 	build_dir := ret.state_.bindings_.LookupVariable("builddir")
 	if build_dir != "" {
@@ -227,7 +228,7 @@ func (this *Builder) Cleanup() {
 				// need to rebuild an output because of a modified header file
 				// mentioned in a depfile, and the command touches its depfile
 				// but is interrupted before it touches its output file.)
-				new_mtime, _, err1 := this.disk_interface_.Stat(o.path())
+				new_mtime, _, err1 := this.disk_interface_.StatNode(o)
 				if err1 != nil { // Log and ignore Stat() errors.
 					this.status_.Error("%s", err1.Error())
 				}
@@ -241,7 +242,7 @@ func (this *Builder) Cleanup() {
 		}
 	}
 
-	if _, notExist, err1 := this.disk_interface_.Stat(this.lock_file_path_); err1 == nil && !notExist {
+	if _, err1 := os.Stat(this.lock_file_path_); err1 == nil {
 		this.disk_interface_.RemoveFile(this.lock_file_path_)
 	}
 }
@@ -535,7 +536,7 @@ func (this *Builder) FinishCommand(result *Result, err *string) bool {
 		// log.
 		if record_mtime == 0 || restat || generator {
 			for _, o := range edge.outputs_ {
-				new_mtime, _, err1 := this.disk_interface_.Stat(o.path())
+				new_mtime, _, err1 := this.disk_interface_.StatNode(o)
 				if err1 != nil {
 					return false
 				}
@@ -581,7 +582,7 @@ func (this *Builder) FinishCommand(result *Result, err *string) bool {
 			panic("should have been rejected by parser")
 		}
 		for _, o := range edge.outputs_ {
-			deps_mtime, _, err1 := this.disk_interface_.Stat(o.path())
+			deps_mtime, _, err1 := this.disk_interface_.StatNode(o)
 			if err1 != nil {
 				return false
 			}

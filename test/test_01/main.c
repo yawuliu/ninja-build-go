@@ -5,7 +5,7 @@
 
 int main()
 {
-        printf("hello world\n");
+        printf("hello woryyld\n");
         fflush(stdout);
 
         while (1);

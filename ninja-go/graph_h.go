@@ -138,6 +138,7 @@ type DependencyScan struct {
 	dyndep_loader_  *DyndepLoader
 	explanations_   Explanations
 	Config_         *BuildConfig
+	PrefixDir       string
 }
 
 type ImplicitDepLoader struct {

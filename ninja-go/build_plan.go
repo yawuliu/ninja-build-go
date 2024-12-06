@@ -193,17 +193,13 @@ func (this *Plan) CleanNode(scan *DependencyScan, node *Node, err *string) bool 
 		}
 		if found {
 			// Recompute most_recent_input.
-			var most_recent_input *Node = nil
+			var inputs []*Node = oe.inputs_[0:end]
 			for i := begin; i < end; i++ {
-				if most_recent_input == nil || oe.inputs_[i].mtime() != most_recent_input.mtime() {
-					most_recent_input = oe.inputs_[i]
-				}
-
 				// Now, this edge is dirty if any of the outputs are dirty.
 				// If the edge isn't dirty, clean the outputs and mark the edge as not
 				// wanted.
 				outputs_dirty := false
-				if !scan.RecomputeOutputsDirty(oe, most_recent_input, &outputs_dirty, err) {
+				if !scan.RecomputeOutputsDirty(oe, inputs, &outputs_dirty, err) {
 					return false
 				}
 				if !outputs_dirty {

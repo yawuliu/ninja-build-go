@@ -79,6 +79,8 @@ type NinjaMain struct {
 	BuildLog *BuildLog
 	DepsLog  DepsLog
 
+	PrefixDir string
+
 	StartTimeMillis int64
 }
 
@@ -89,6 +91,7 @@ func NewNinjaMain(ninja_command, prefixDir string, config *BuildConfig) *NinjaMa
 	ret.StartTimeMillis = GetTimeMillis()
 	ret.State_ = NewState()
 	ret.BuildLog = NewBuildLog()
+	ret.PrefixDir = prefixDir
 	ret.DiskInterface = NewRealDiskInterface(prefixDir)
 	return &ret
 }
@@ -135,7 +138,8 @@ func (this *NinjaMain) RunBuild(args *[]string, status Status) int {
 
 	this.DiskInterface.AllowStatCache(g_experimental_statcache)
 
-	builder := NewBuilder(this.State_, this.Config_, this.BuildLog, &this.DepsLog, this.DiskInterface, status, this.StartTimeMillis)
+	builder := NewBuilder(this.State_, this.Config_, this.BuildLog, &this.DepsLog,
+		this.DiskInterface, status, this.StartTimeMillis, this.PrefixDir)
 	defer builder.RealeaseBuilder()
 	for i := 0; i < len(targets); i++ {
 		if !builder.AddTarget2(targets[i], &err) {
@@ -265,7 +269,8 @@ func (this *NinjaMain) RebuildManifest(input_file string, err *string, status St
 		return false
 	}
 
-	builder := NewBuilder(this.State_, this.Config_, this.BuildLog, &this.DepsLog, this.DiskInterface, status, this.StartTimeMillis)
+	builder := NewBuilder(this.State_, this.Config_, this.BuildLog, &this.DepsLog,
+		this.DiskInterface, status, this.StartTimeMillis, this.PrefixDir)
 	defer builder.RealeaseBuilder()
 	if !builder.AddTarget2(node, err) {
 		return false
@@ -1049,7 +1054,7 @@ func (this *NinjaMain) ToolDeps(options *Options, args *[]string) int {
 			continue
 		}
 
-		mtime, notExist, err := disk_interface.Stat(it.path())
+		mtime, notExist, err := disk_interface.StatNode(it)
 		if err != nil {
 			Error("%s", err.Error()) // Log and ignore Stat() errors;
 		}

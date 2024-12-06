@@ -301,11 +301,11 @@ func (this *BuildLog) Restat(path string, disk_interface DiskInterface, outputs 
 			}
 		}
 		if !skip {
-			mtime, _, err1 := disk_interface.Stat(second.output)
-			if err1 != nil {
-				return false
-			}
-			second.mtime = mtime
+			//mtime, _, err1 := disk_interface.Stat(second.output)
+			//if err1 != nil {
+			return false
+			//}
+			//second.mtime = mtime
 		}
 		_, err1 = this.WriteEntry(file, second)
 		if err1 != nil {

@@ -43,6 +43,34 @@ func AreLongPathsEnabled() bool {
 	return (info.FileSystemFlags & 0x02) != 0 // FILE_SUPPORTS_LONG_NAMES
 }
 
+// // Node in_edge所有文件的Hash, path_也可能存在于远程，in_edge中的文件也可能存在于远程
+func (this *RealDiskInterface) StatNode(node *Node) (mtime TimeStamp, notExist bool, err error) {
+	if node.in_edge() == nil {
+		return this.Stat(node.path())
+	} else {
+		METRIC_RECORD("node stat")
+		// MSDN: "Naming Files, Paths, and Namespaces"
+		// http://msdn.microsoft.com/en-us/library/windows/desktop/aa365247(v=vs.85).aspx
+		path := node.path()
+		if path != "" && !AreLongPathsEnabled() && path[0] != '\\' && len(path) > syscall.MAX_PATH {
+			return -1, true, fmt.Errorf("Stat(%s): Filename longer than %d characters", path, syscall.MAX_PATH)
+		}
+		path, err = filepath.Abs(path)
+		if err != nil {
+			return -1, true, err
+		}
+		_, err = os.Stat(path)
+		if err != nil {
+			if os.IsNotExist(err) || os.IsPermission(err) {
+				return 0, true, nil // 对应于 C++ 中的 ERROR_FILE_NOT_FOUND 或 ERROR_PATH_NOT_FOUND
+			}
+			return -1, true, err
+		}
+		return NodesHash(node.in_edge().inputs_, this.BuildDir)
+	}
+
+}
+
 // / stat() a file, returning the mtime, or 0 if missing and -1 on
 // / other errors.
 func (this *RealDiskInterface) Stat(path string) (mtime TimeStamp, notExist bool, err error) {

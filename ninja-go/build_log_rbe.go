@@ -91,13 +91,20 @@ func (this *BuildLog) LookupByOutputRbe(rbeService, rbeInstance, path string, co
 			needDownload := false
 			if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) || errors.Is(err, os.ErrPermission) {
 				needDownload = true
+				color.Red("%s not exist.\n", path)
 			} else if err == nil {
 				hash, err2 := hashFileBase64(path, this.PrefixDir)
 				if err2 != nil {
 					needDownload = true
+					color.Red("%s hashFileBase64 fail %s.\n", path, err2.Error())
 				} else if string(hash) != ret.OutputHash {
 					needDownload = true
+					color.Red("%s  string(hash) != ret.OutputHash.\n", path)
+				} else {
+					color.Yellow("%s  string(hash) == ret.OutputHash.\n", path)
 				}
+			} else {
+				color.Red("%s err: %s.\n", path, err.Error())
 			}
 			if needDownload {
 				color.Green("RbeDownload %s\n", path)
@@ -105,6 +112,8 @@ func (this *BuildLog) LookupByOutputRbe(rbeService, rbeInstance, path string, co
 				if err2 != nil {
 					return nil
 				}
+			} else {
+
 			}
 		}
 		return &LogEntry{

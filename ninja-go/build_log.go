@@ -130,22 +130,18 @@ func (this *BuildLog) Load(path string, err1 *string) LoadStatus {
 		line = strings.TrimSpace(line)
 
 		if logVersion == 0 {
-			const signaturePrefix = " ninja_log_v"
-			if strings.HasPrefix(line, signaturePrefix) {
-				versionStr := strings.TrimPrefix(line, signaturePrefix)
-				logVersion, err = strconv.Atoi(versionStr)
-				if err != nil {
-					*err1 = err.Error()
-					return LOAD_ERROR
-				}
+			_, err := fmt.Sscanf(line, kFileSignature, &logVersion)
+			if err != nil {
+				*err1 = err.Error()
+				return LOAD_ERROR
+			}
 
-				if logVersion < kOldestSupportedVersion {
-					*err1 = fmt.Errorf("build log version is too old; starting over").Error()
-					return LOAD_NOT_FOUND
-				} else if logVersion > kCurrentVersion {
-					*err1 = fmt.Errorf("build log version is too new; starting over").Error()
-					return LOAD_NOT_FOUND
-				}
+			if logVersion < kOldestSupportedVersion {
+				*err1 = fmt.Errorf("build log version is too old; starting over").Error()
+				return LOAD_NOT_FOUND
+			} else if logVersion > kCurrentVersion {
+				*err1 = fmt.Errorf("build log version is too new; starting over").Error()
+				return LOAD_NOT_FOUND
 			}
 		}
 

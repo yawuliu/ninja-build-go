@@ -618,7 +618,7 @@ func (this *DependencyScan) VerifyDAG(node *Node, stack *[]*Node, err *string) b
 // / Recompute whether a given single output should be marked dirty.
 // / Returns true if so.
 func (this *DependencyScan) RecomputeOutputDirty(edge *Edge, inputs []*Node, command string, output *Node) bool {
-	if edge.is_phony() {
+	/*if edge.is_phony() {
 		// Phony edges don't write any output.  Outputs are only dirty if
 		// there are no inputs and we're missing the output.
 		if len(edge.inputs_) == 0 && !output.exists() {
@@ -643,7 +643,7 @@ func (this *DependencyScan) RecomputeOutputDirty(edge *Edge, inputs []*Node, com
 		this.explanations_.Record(output, "output %s doesn't exist",
 			output.path())
 		return true
-	}
+	}*/
 
 	var entry *LogEntry = nil
 

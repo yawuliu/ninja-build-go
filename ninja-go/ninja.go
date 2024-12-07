@@ -90,7 +90,7 @@ func NewNinjaMain(ninja_command, prefixDir string, config *BuildConfig) *NinjaMa
 	ret.Config_ = config
 	ret.StartTimeMillis = GetTimeMillis()
 	ret.State_ = NewState()
-	ret.BuildLog = NewBuildLog()
+	ret.BuildLog = NewBuildLog(config, prefixDir)
 	ret.PrefixDir = prefixDir
 	ret.DiskInterface = NewRealDiskInterface(prefixDir)
 	return &ret
@@ -296,11 +296,11 @@ func (this *NinjaMain) RebuildManifest(input_file string, err *string, status St
 
 func (this *NinjaMain) ParsePreviousElapsedTimes() {
 	for _, edge := range this.State_.edges_ {
-		command := edge.EvaluateCommand( /*incl_rsp_file=*/ true)
-		currentMtime, _, _ := NodesHash(edge.inputs_, this.PrefixDir)
+		//command := edge.EvaluateCommand( /*incl_rsp_file=*/ true)
+		//currentMtime, _, _ := NodesHash(edge.inputs_, this.PrefixDir)
 		for _, out := range edge.outputs_ {
-			currentHash := HashCommand(command)
-			log_entry := this.BuildLog.LookupByOutput(this.Config_, out.path(), currentHash, currentMtime)
+			//currentHash := HashCommand(command)
+			log_entry := this.BuildLog.LookupByOutput(this.Config_, out.path(), 0, 0)
 			if log_entry == nil {
 				continue // Maybe we'll have log entry for next output of this edge?
 			}

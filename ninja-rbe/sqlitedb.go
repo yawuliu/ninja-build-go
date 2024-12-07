@@ -40,7 +40,7 @@ func OpenDb(dbPath string) (err error) {
 		stmt, err := conn.Prepare("CREATE TABLE IF NOT EXISTS log_entry (`id` INTEGER PRIMARY KEY, " +
 			"`output` TEXT, `command_hash` TEXT, `mtime` TEXT, `start_time` TEXT, `end_time` TEXT," +
 			"`instance` TEXT, `created_at` INTEGER, `last_access` INTEGER, `expired_duration` INTEGER," +
-			"`deleted` INTEGER," +
+			"`deleted` INTEGER, `output_hash` TEXT, " +
 			" UNIQUE (`command_hash`, `mtime`, `output`,  `instance`, `deleted`) ON CONFLICT REPLACE " +
 			");")
 		if err != nil {
@@ -51,8 +51,8 @@ func OpenDb(dbPath string) (err error) {
 		}
 	}
 	stmtLog, err = conn.Prepare("INSERT INTO log_entry (`output`, `command_hash`, `mtime`, `start_time`, `end_time`, " +
-		"`instance`, `created_at`, `last_access`, `expired_duration`, `deleted`) VALUES" +
-		" ($output, $command_hash, $mtime , $start_time, $end_time, $instance, $created_at, $last_access, $expired_duration, $deleted);")
+		"`instance`, `created_at`, `last_access`, `expired_duration`, `deleted`, `output_hash`) VALUES" +
+		" ($output, $command_hash, $mtime , $start_time, $end_time, $instance, $created_at, $last_access, $expired_duration, $deleted, $output_hash);")
 	if err != nil {
 		return err
 	}
@@ -87,7 +87,7 @@ func CloseDb() (err error) {
 	return
 }
 
-func InsertLogEntry(output, commandHash, startTime, endTime, mtime, instance, expired_duration_str string) error {
+func InsertLogEntry(output, commandHash, startTime, endTime, mtime, outputHash, instance, expired_duration_str string) error {
 	defer stmtLog.Reset()
 	now := time.Now()
 	created_at := now.Unix()
@@ -106,6 +106,7 @@ func InsertLogEntry(output, commandHash, startTime, endTime, mtime, instance, ex
 	stmtLog.SetInt64("$created_at", created_at)
 	stmtLog.SetInt64("$last_access", last_access)
 	stmtLog.SetInt64("$deleted", 0)
+	stmtLog.SetText("$output_hash", outputHash)
 	_, err := stmtLog.Step()
 	if err != nil {
 		return err
@@ -163,6 +164,7 @@ func FindCommandHashAndMtime(output, instance, command_hash, mtime string) (*Rbe
 		created_at := stmtFindRowByKey.GetInt64("created_at")
 		last_access := stmtFindRowByKey.GetInt64("last_access")
 		expired_duration := stmtFindRowByKey.GetInt64("expired_duration")
+		outputHash := stmtFindRowByKey.GetText("output_hash")
 		err = UpdateFileAccess(id)
 		if err != nil {
 			return nil, err
@@ -170,6 +172,7 @@ func FindCommandHashAndMtime(output, instance, command_hash, mtime string) (*Rbe
 		return &RbeLogEntry{Output: output, CommandHash: command_hash, Mtime: mtime,
 			StartTime: start_time, EndTime: end_time, Instance: instance,
 			CreatedAt: created_at, LastAccess: last_access, ExpiredDuration: expired_duration,
+			OutputHash: outputHash,
 		}, nil
 	}
 	return nil, os.ErrNotExist

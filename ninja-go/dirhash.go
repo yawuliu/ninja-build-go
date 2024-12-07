@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"github.com/segmentio/fasthash/fnv1a"
 	"github.com/zeebo/blake3"
@@ -25,6 +26,14 @@ func hashFile(path, prefix string) ([]byte, error) {
 	}
 	fmt.Fprintf(h, "f: %x %s\n", hf.Sum(nil), strings.TrimPrefix(path, prefix))
 	return h.Sum(nil), nil
+}
+
+func hashFileBase64(path, prefix string) (string, error) {
+	buf, err := hashFile(path, prefix)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf), nil
 }
 
 type HashFunc func(files []string, prefix string, open func(string) (io.ReadCloser, error)) ([]byte, error)

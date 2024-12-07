@@ -15,10 +15,13 @@ type BuildLog struct {
 	log_file_           *os.File
 	log_file_path_      string
 	needs_recompaction_ bool
+	config_             *BuildConfig
+	PrefixDir           string
 }
 
 type LogEntry struct {
 	output       string
+	output_hash  string
 	command_hash uint64
 	start_time   int
 	end_time     int
@@ -28,9 +31,11 @@ type BuildLogUser interface {
 	IsPathDead(path string) bool
 }
 
-func NewBuildLog() *BuildLog {
+func NewBuildLog(config *BuildConfig, prefixDir string) *BuildLog {
 	ret := BuildLog{}
 	ret.entries_ = make(Entries)
+	ret.config_ = config
+	ret.PrefixDir = prefixDir
 	return &ret
 }
 func (this *BuildLog) ReleaseBuildLog() {
@@ -203,7 +208,7 @@ func (this *BuildLog) Load(path string, err1 *string) LoadStatus {
 
 // / Lookup a previously-run command by its output path.
 func (this *BuildLog) LookupByOutput(config *BuildConfig, path string, commandHash uint64, currentMtime TimeStamp) *LogEntry {
-	if config.RbeService != "" {
+	if commandHash != 0 && config.RbeService != "" {
 		e := this.LookupByOutputRbe(config.RbeService, config.RbeInstance, path, commandHash, currentMtime)
 		if e != nil {
 			return e
@@ -221,6 +226,16 @@ func (this *BuildLog) WriteEntry(f *os.File, entry *LogEntry) (bool, error) {
 	_, err := fmt.Fprintf(f, "%d\t%d\t%d\t%s\t%x\n",
 		entry.start_time, entry.end_time, entry.mtime,
 		entry.output, entry.command_hash)
+	if err == nil && this.config_.RbeService != "" {
+		if entry.output_hash == "" {
+			hash, err1 := hashFileBase64(entry.output, this.PrefixDir)
+			if err1 != nil {
+				return err1 == nil, err1
+			}
+			entry.output_hash = string(hash)
+		}
+		this.WriteEntryRbe(entry)
+	}
 	return err == nil, err
 }
 
@@ -377,7 +392,7 @@ func HashCommand(command string) uint64 {
 func (this *LogEntry) CompareLogEntryEq(o *LogEntry) bool {
 	return this.output == o.output && this.command_hash == o.command_hash &&
 		this.start_time == o.start_time && this.end_time == o.end_time &&
-		this.mtime == o.mtime
+		this.mtime == o.mtime && this.output_hash == o.output_hash
 }
 
 func NewLogEntry(output string) *LogEntry {

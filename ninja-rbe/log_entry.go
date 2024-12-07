@@ -7,6 +7,7 @@ type RbeLogEntry struct {
 	Mtime       string /* index_hash,UNIQUE */
 	StartTime   string
 	EndTime     string
+	OutputHash  string
 	//
 	Instance        string /* index_inst */
 	CreatedAt       int64

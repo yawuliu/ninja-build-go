@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"expvar"
-	"fmt"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/expvarhandler"
 	"log"
@@ -37,6 +36,7 @@ func HandleUpload(ctx *fasthttp.RequestCtx) {
 	startTime := string(ctx.FormValue("start_time"))
 	endTime := string(ctx.FormValue("end_time"))
 	mtime := string(ctx.FormValue("mtime"))
+	outputHash := string(ctx.FormValue("output_hash"))
 	instance := string(ctx.FormValue("instance"))
 	expired_duration := string(ctx.FormValue("expired_duration"))
 	header, err := ctx.FormFile("file")
@@ -53,12 +53,11 @@ func HandleUpload(ctx *fasthttp.RequestCtx) {
 		ctx.Success("plain/text", []byte("already exists."))
 		return
 	}
-	storeName := fmt.Sprintf("%s_%s", commandHash, mtime)
-	if err := fasthttp.SaveMultipartFile(header, filepath.Join(fsRootDir, storeName)); err != nil {
+	if err := fasthttp.SaveMultipartFile(header, filepath.Join(fsRootDir, outputHash)); err != nil {
 		ctx.Error(err.Error(), fasthttp.StatusInternalServerError)
 		return
 	}
-	err = InsertLogEntry(output, commandHash, startTime, endTime, mtime,
+	err = InsertLogEntry(output, commandHash, startTime, endTime, mtime, outputHash,
 		instance, expired_duration)
 	if err != nil {
 		ctx.Error(err.Error(), fasthttp.StatusInternalServerError)

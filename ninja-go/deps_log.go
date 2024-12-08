@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -127,32 +126,32 @@ func (this *DepsLog) RecordDeps(node *Node, mtime TimeStamp, nodes []*Node, err 
 		return false
 	}
 	size |= 0x80000000 // Deps record: set high bit.
-	_, err1 := fmt.Fprintf(this.file_, "%d", size)
+	_, err1 := fmt.Fprintf(this.file_, "%d ", size)
 	if err1 != nil {
 		*err = err1.Error()
 		return false
 	}
 	id := node.id()
-	_, err1 = fmt.Fprintf(this.file_, "%d", id)
+	_, err1 = fmt.Fprintf(this.file_, "%d ", id)
 	if err1 != nil {
 		*err = err1.Error()
 		return false
 	}
 	mtime_part := uint32(mtime & 0xffffffff)
-	_, err1 = fmt.Fprintf(this.file_, "%d", mtime_part)
+	_, err1 = fmt.Fprintf(this.file_, "%d ", mtime_part)
 	if err1 != nil {
 		*err = err1.Error()
 		return false
 	}
 	mtime_part = uint32((mtime >> 32) & 0xffffffff)
-	_, err1 = fmt.Fprintf(this.file_, "%d", mtime_part)
+	_, err1 = fmt.Fprintf(this.file_, "%d ", mtime_part)
 	if err1 != nil {
 		*err = err1.Error()
 		return false
 	}
 	for i := 0; i < node_count; i++ {
 		id = nodes[i].id()
-		_, err1 := fmt.Fprintf(this.file_, "%d", id)
+		_, err1 := fmt.Fprintf(this.file_, "%d ", id)
 		if err1 != nil {
 			*err = err1.Error()
 			return false
@@ -484,24 +483,23 @@ func (this *DepsLog) RecordId(node *Node) bool {
 		return false
 	}
 
-	writer := bufio.NewWriter(this.file_)
-	if err := binary.Write(writer, binary.LittleEndian, size); err != nil {
+	if _, err := this.file_.WriteString(strconv.FormatUint(uint64(size), 10) + " "); err != nil {
 		return false
 	}
-	if _, err := writer.WriteString(node.path_); err != nil {
+	if _, err := this.file_.WriteString(node.path_ + " "); err != nil {
 		return false
 	}
-	if padding > 0 {
-		if _, err := writer.Write(make([]byte, padding)); err != nil {
-			return false
-		}
-	}
+	//if padding > 0 {
+	//	if _, err := this.file_.WriteString(make([]byte, padding)); err != nil {
+	//		return false
+	//	}
+	//}
 	id := len(this.nodes_)
 	checksum := uint32(^uint32(id))
-	if err := binary.Write(writer, binary.LittleEndian, checksum); err != nil {
+	if _, err := this.file_.WriteString(strconv.FormatUint(uint64(checksum), 10) + "\n"); err != nil {
 		return false
 	}
-	if err := writer.Flush(); err != nil {
+	if err := this.file_.Sync(); err != nil {
 		return false
 	}
 
@@ -535,13 +533,13 @@ func (this *DepsLog) OpenForWriteIfNeeded() bool {
 	SetCloseOnExec(int(this.file_.Fd()))
 
 	// 在 Windows 上，以追加模式打开文件不会将文件指针设置为文件末尾。明确地执行此操作。
-	if _, err := this.file_.Seek(0, os.SEEK_END); err != nil {
-		return false
-	}
+	//if _, err := this.file_.Seek(0, os.SEEK_END); err != nil {
+	//	return false
+	//}
 
 	// 如果文件位置为 0，则写入文件签名和版本号
 	if this.fileTell() == 0 {
-		if _, err := this.file_.Write([]byte(kFileSignature_DepsLog)); err != nil {
+		if _, err := this.file_.WriteString(kFileSignature_DepsLog); err != nil {
 			return false
 		}
 		if _, err := this.file_.WriteString(strconv.Itoa(kCurrentVersion_DepsLog)); err != nil {

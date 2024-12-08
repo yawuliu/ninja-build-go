@@ -101,7 +101,7 @@ func (this *MissingDependencyScanner) ProcessNode(node *Node) {
 			&parser_opts, nil,
 			depfile_deps)
 		err := ""
-		dep_loader.LoadDeps(edge, &err)
+		dep_loader.LoadDeps(nil, edge, &err)
 		if len(depfile_deps) != 0 {
 			this.ProcessNodeDeps(node, depfile_deps)
 		}

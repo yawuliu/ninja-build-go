@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/fatih/color"
+)
 
 type Explanations interface {
 	dummy()
@@ -30,8 +33,8 @@ func (this *OptionalExplanations) Record(item interface{}, fmt string, args ...i
 
 // / Same as Record(), but uses a va_list to pass formatting arguments.
 func (this *OptionalExplanations) RecordArgs(item interface{}, fmt1 string, args []interface{}) {
-	buffer := ""
-	fmt.Sprintf(buffer, fmt1, args)
+	buffer := fmt.Sprintf(fmt1, args)
+	color.Black(fmt1, args)
 	this.map_[item] = append(this.map_[item], buffer)
 }
 

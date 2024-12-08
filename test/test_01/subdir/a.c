@@ -2,6 +2,5 @@
 #include <stdio.h>
 
 void subdir() {
-	
 	printf("subdir\n");
 }

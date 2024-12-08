@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -188,6 +189,9 @@ func binaryLittleEndianToIntSlice(buf []byte) []int {
 	return slice
 }
 
+const kFileSignature_DepsLog = "# ninjadeps\n"
+const kCurrentVersion_DepsLog = 4
+
 func (this *DepsLog) Load(path string, state *State, err1 *string) LoadStatus {
 	file, err := os.Open(path)
 	if err != nil {
@@ -204,7 +208,7 @@ func (this *DepsLog) Load(path string, state *State, err1 *string) LoadStatus {
 	if err != nil {
 		return LOAD_ERROR
 	}
-	if !strings.HasPrefix(string(buf[:kFileSignatureSize]), kFileSignature) {
+	if !strings.HasPrefix(string(buf[:kFileSignatureSize]), kFileSignature_DepsLog) {
 		*err1 = "bad deps log signature or version; starting over"
 		os.Remove(path)
 		return LOAD_SUCCESS
@@ -212,7 +216,7 @@ func (this *DepsLog) Load(path string, state *State, err1 *string) LoadStatus {
 
 	var version int32
 	err = binary.Read(file, binary.LittleEndian, &version)
-	if err != nil || version != kCurrentVersion {
+	if err != nil || version != kCurrentVersion_DepsLog {
 		*err1 = "bad deps log version; starting over"
 		os.Remove(path)
 		return LOAD_SUCCESS
@@ -518,11 +522,11 @@ func (this *DepsLog) OpenForWriteIfNeeded() bool {
 	if err != nil {
 		return false
 	}
-	defer func() {
-		if this.file_ != nil {
-			this.file_.Close()
-		}
-	}()
+	//defer func() {
+	//	if this.file_ != nil {
+	//		this.file_.Close()
+	//	}
+	//}()
 
 	// 设置缓冲区大小，并在每个记录后刷新文件缓冲区以确保记录不会被部分写入
 	// this.file_.SetBufSize(kMaxRecordSize + 1)
@@ -537,10 +541,10 @@ func (this *DepsLog) OpenForWriteIfNeeded() bool {
 
 	// 如果文件位置为 0，则写入文件签名和版本号
 	if this.fileTell() == 0 {
-		if _, err := this.file_.Write([]byte(kFileSignature)); err != nil {
+		if _, err := this.file_.Write([]byte(kFileSignature_DepsLog)); err != nil {
 			return false
 		}
-		if err := binary.Write(this.file_, binary.LittleEndian, kCurrentVersion); err != nil {
+		if _, err := this.file_.WriteString(strconv.Itoa(kCurrentVersion_DepsLog)); err != nil {
 			return false
 		}
 	}

@@ -16,6 +16,7 @@ type Edge struct {
 	rule_                    *Rule
 	pool_                    *Pool
 	inputs_                  []*Node
+	deps_node                []*Node
 	outputs_                 []*Node
 	validations_             []*Node
 	dyndep_                  *Node
@@ -164,7 +165,7 @@ func NewImplicitDepLoader(state *State, deps_log *DepsLog, disk_interface DiskIn
 // / @return false on error (without filling \a err if info is just missing
 //
 //	or out of date).
-func (this *ImplicitDepLoader) LoadDeps(edge *Edge, err *string) bool {
+func (this *ImplicitDepLoader) LoadDeps(builder *Builder, edge *Edge, err *string) bool {
 	deps_type := edge.GetBinding("deps")
 	if deps_type != "" {
 		return this.LoadDepsFromLog(edge, err)
@@ -175,6 +176,26 @@ func (this *ImplicitDepLoader) LoadDeps(edge *Edge, err *string) bool {
 		return this.LoadDepFile(edge, depfile, err)
 	}
 
+	// edge.deps_node
+	if builder != nil {
+		result := Result{}
+		deps_nodes := []*Node{}
+		depfile := ""
+		deps_type := edge.GetBinding("deps")
+		deps_prefix := edge.GetBinding("msvc_deps_prefix")
+		if deps_type != "" {
+			extract_err := ""
+			if !builder.ExtractDeps(&result, deps_type, deps_prefix, &deps_nodes, &depfile,
+				&extract_err) &&
+				result.success() {
+				if result.output != "" {
+					result.output += "\n"
+				}
+				result.output += extract_err
+				result.status = ExitFailure
+			}
+		}
+	}
 	// No deps to load.
 	return true
 }

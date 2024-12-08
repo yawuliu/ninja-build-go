@@ -265,7 +265,7 @@ func (this *Builder) AddTarget(name string, err *string) *Node {
 // / @return false on error.
 func (this *Builder) AddTarget2(target *Node, err *string) bool {
 	validation_nodes := []*Node{}
-	if !this.scan_.RecomputeDirty(target, validation_nodes, err) {
+	if !this.scan_.RecomputeDirty(this, target, validation_nodes, err) {
 		return false
 	}
 
@@ -493,11 +493,12 @@ func (this *Builder) FinishCommand(result *Result, err *string) bool {
 	// extraction itself can fail, which makes the command fail from a
 	// build perspective.
 	deps_nodes := []*Node{}
+	depfile := ""
 	deps_type := edge.GetBinding("deps")
 	deps_prefix := edge.GetBinding("msvc_deps_prefix")
 	if deps_type != "" {
 		extract_err := ""
-		if !this.ExtractDeps(result, deps_type, deps_prefix, deps_nodes,
+		if !this.ExtractDeps(result, deps_type, deps_prefix, &deps_nodes, &depfile,
 			&extract_err) &&
 			result.success() {
 			if result.output != "" {
@@ -507,6 +508,11 @@ func (this *Builder) FinishCommand(result *Result, err *string) bool {
 			result.status = ExitFailure
 		}
 	}
+	//if depfile != "" {
+	//	var slash_bits uint64 = 0
+	//	CanonicalizePath(&depfile, &slash_bits)
+	//	edge.inputs_ = append(edge.inputs_, NewNode(depfile, slash_bits))
+	//}
 
 	start_time_millis := int64(0)
 	end_time_millis := int64(0)
@@ -572,7 +578,7 @@ func (this *Builder) FinishCommand(result *Result, err *string) bool {
 	}
 
 	if this.scan_.build_log() != nil {
-		if !this.scan_.build_log().RecordCommand(edge, int(start_time_millis),
+		if !this.scan_.build_log().RecordCommand(edge, deps_nodes, int(start_time_millis),
 			int(end_time_millis), record_mtime) {
 			*err = string("Error writing to build log: ") + *err
 			return false
@@ -602,7 +608,7 @@ func (this *Builder) SetBuildLog(log *BuildLog) {
 	this.scan_.set_build_log(log)
 }
 
-func (this *Builder) ExtractDeps(result *Result, deps_type string, deps_prefix string, deps_nodes []*Node, err *string) bool {
+func (this *Builder) ExtractDeps(result *Result, deps_type string, deps_prefix string, deps_nodes *[]*Node, p_depfile *string, err *string) bool {
 	if deps_type == "msvc" {
 		parser := NewCLParser()
 		output := ""
@@ -615,7 +621,7 @@ func (this *Builder) ExtractDeps(result *Result, deps_type string, deps_prefix s
 			// all backslashes (as some of the slashes will certainly be backslashes
 			// anyway). This could be fixed if necessary with some additional
 			// complexity in IncludesNormalize::Relativize.
-			deps_nodes = append(deps_nodes, this.state_.GetNode(i, math.MaxUint64))
+			*deps_nodes = append(*deps_nodes, this.state_.GetNode(i, math.MaxUint64))
 		}
 	} else if deps_type == "gcc" {
 		depfile := result.edge.GetUnescapedDepfile()
@@ -647,7 +653,7 @@ func (this *Builder) ExtractDeps(result *Result, deps_type string, deps_prefix s
 		for _, i := range deps.ins_ {
 			var slash_bits uint64 = 0
 			CanonicalizePath(&i, &slash_bits)
-			deps_nodes = append(deps_nodes, this.state_.GetNode(i, slash_bits))
+			*deps_nodes = append(*deps_nodes, this.state_.GetNode(i, slash_bits))
 		}
 
 		if !g_keep_depfile {
@@ -656,6 +662,7 @@ func (this *Builder) ExtractDeps(result *Result, deps_type string, deps_prefix s
 				return false
 			}
 		}
+		*p_depfile = depfile
 	} else {
 		log.Fatalf("unknown deps type '%s'", deps_type)
 	}

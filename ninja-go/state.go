@@ -140,7 +140,6 @@ func (this *State) AddEdge(rule *Rule) *Edge {
 func (this *State) GetNode(path string, slash_bits uint64) *Node {
 	node := this.LookupNode(path)
 	if node != nil {
-
 		return node
 	}
 	node = NewNode(path, slash_bits)

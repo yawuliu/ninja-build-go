@@ -59,7 +59,11 @@ func (this *BuildLog) OpenForWrite(path string, user BuildLogUser, err *string) 
 	return true
 }
 
-func (this *BuildLog) RecordCommand(edge *Edge, start_time int, end_time int, mtime TimeStamp) bool {
+func (this *BuildLog) RecordCommand(edge *Edge, deps_nodes []*Node, start_time int, end_time int, mtime TimeStamp) bool {
+	//if edge.deps_loaded_ {
+	//	depfile := edge.GetUnescapedDepfile()
+	//	//edge.dyndep_
+	//}
 	command := edge.EvaluateCommand(true)
 	command_hash := HashCommand(command)
 	for _, out := range edge.outputs_ {
@@ -76,7 +80,6 @@ func (this *BuildLog) RecordCommand(edge *Edge, start_time int, end_time int, mt
 		log_entry.start_time = start_time
 		log_entry.end_time = end_time
 		log_entry.mtime = mtime
-
 		if !this.OpenForWriteIfNeeded() {
 			return false
 		}
@@ -103,6 +106,8 @@ func (this *BuildLog) Close() {
 
 // / Load the on-disk log.
 func (this *BuildLog) Load(path string, err1 *string) LoadStatus {
+	return LOAD_SUCCESS
+
 	file, err := os.Open(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {

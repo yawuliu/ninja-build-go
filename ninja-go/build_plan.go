@@ -469,7 +469,7 @@ func (this *Plan) RefreshDyndepDependents(scan *DependencyScan, node *Node, err 
 	for n, _ := range dependents {
 		// Check if this dependent node is now dirty.  Also checks for new cycles.
 		validation_nodes := []*Node{}
-		if !scan.RecomputeDirty(n, validation_nodes, err) {
+		if !scan.RecomputeDirty(this.builder_, n, validation_nodes, err) {
 			return false
 		}
 

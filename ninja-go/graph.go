@@ -358,7 +358,7 @@ func NewDependencyScan(state *State, build_log *BuildLog, deps_log *DepsLog, dis
 // / state accordingly.
 // / Appends any validation nodes found to the nodes parameter.
 // / Returns false on failure.
-func (this *DependencyScan) RecomputeDirty(initial_node *Node, validation_nodes []*Node, err *string) bool {
+func (this *DependencyScan) RecomputeDirty(builder *Builder, initial_node *Node, validation_nodes []*Node, err *string) bool {
 	stack := []*Node{}
 	new_validation_nodes := []*Node{}
 	nodes := deque.NewDeque() //(1, initial_node);
@@ -373,7 +373,7 @@ func (this *DependencyScan) RecomputeDirty(initial_node *Node, validation_nodes 
 		stack = []*Node{}
 		new_validation_nodes = []*Node{}
 
-		if !this.RecomputeNodeDirty(node.(*Node), &stack, &new_validation_nodes, err) {
+		if !this.RecomputeNodeDirty(builder, node.(*Node), &stack, &new_validation_nodes, err) {
 			return false
 		}
 		for _, i := range new_validation_nodes {
@@ -427,7 +427,7 @@ func (this *DependencyScan) LoadDyndeps1(node *Node, ddf DyndepFile, err *string
 	return this.dyndep_loader_.LoadDyndeps1(node, ddf, err)
 }
 
-func (this *DependencyScan) RecomputeNodeDirty(node *Node,
+func (this *DependencyScan) RecomputeNodeDirty(builder *Builder, node *Node,
 	stack *[]*Node, validation_nodes *[]*Node, err *string) bool {
 	edge := node.in_edge()
 	if edge == nil {
@@ -478,7 +478,7 @@ func (this *DependencyScan) RecomputeNodeDirty(node *Node,
 		//   Later during the build the dyndep file will become ready and be
 		//   loaded to update this edge before it can possibly be scheduled.
 		if edge.dyndep_ != nil && edge.dyndep_.dyndep_pending() {
-			if !this.RecomputeNodeDirty(edge.dyndep_, stack, validation_nodes, err) {
+			if !this.RecomputeNodeDirty(builder, edge.dyndep_, stack, validation_nodes, err) {
 				return false
 			}
 
@@ -501,7 +501,7 @@ func (this *DependencyScan) RecomputeNodeDirty(node *Node,
 	if !edge.deps_loaded_ {
 		// This is our first encounter with this edge.  Load discovered deps.
 		edge.deps_loaded_ = true
-		if !this.dep_loader_.LoadDeps(edge, err) {
+		if !this.dep_loader_.LoadDeps(builder, edge, err) {
 			if *err != "" {
 				return false
 			}
@@ -523,7 +523,7 @@ func (this *DependencyScan) RecomputeNodeDirty(node *Node,
 	var inputs []*Node = edge.inputs_
 	for index, i := range edge.inputs_ {
 		// Visit this input.
-		if !this.RecomputeNodeDirty(i, stack, validation_nodes, err) {
+		if !this.RecomputeNodeDirty(builder, i, stack, validation_nodes, err) {
 			return false
 		}
 

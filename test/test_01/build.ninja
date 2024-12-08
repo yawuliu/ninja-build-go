@@ -4,6 +4,7 @@ cflags = -Wall
 rule compile
   command = $cc $cflags -MMD -MF $out.d -c $in -o $out
   depfile = $out.d
+  deps = gcc
 
 build main.o: compile main.c
 

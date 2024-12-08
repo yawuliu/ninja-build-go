@@ -1,0 +1,9 @@
+del demo.exe
+del .ninja_log
+del .ninja_deps
+del "main.o"
+del "main.o.d"
+del "subdir\\a.o"
+del "subdir\\a.o.d"
+del "subdir\\subdir1\\a.o"
+del "subdir\\subdir1\\a.o.d"

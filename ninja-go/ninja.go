@@ -77,7 +77,7 @@ type NinjaMain struct {
 	BuildDir string
 
 	BuildLog *BuildLog
-	DepsLog  DepsLog
+	DepsLog  *DepsLog
 
 	PrefixDir string
 
@@ -91,6 +91,7 @@ func NewNinjaMain(ninja_command, prefixDir string, config *BuildConfig) *NinjaMa
 	ret.StartTimeMillis = GetTimeMillis()
 	ret.State_ = NewState()
 	ret.BuildLog = NewBuildLog(config, prefixDir)
+	ret.DepsLog = NewDepsLog()
 	ret.PrefixDir = prefixDir
 	ret.DiskInterface = NewRealDiskInterface(prefixDir)
 	return &ret
@@ -98,6 +99,7 @@ func NewNinjaMain(ninja_command, prefixDir string, config *BuildConfig) *NinjaMa
 
 func (this *NinjaMain) Release() {
 	this.BuildLog.ReleaseBuildLog()
+	this.DepsLog.ReleaseDepsLog()
 	this.DiskInterface.ReleaseRealDiskInterface()
 }
 
@@ -138,7 +140,7 @@ func (this *NinjaMain) RunBuild(args *[]string, status Status) int {
 
 	this.DiskInterface.AllowStatCache(g_experimental_statcache)
 
-	builder := NewBuilder(this.State_, this.Config_, this.BuildLog, &this.DepsLog,
+	builder := NewBuilder(this.State_, this.Config_, this.BuildLog, this.DepsLog,
 		this.DiskInterface, status, this.StartTimeMillis, this.PrefixDir)
 	defer builder.RealeaseBuilder()
 	for i := 0; i < len(targets); i++ {
@@ -262,7 +264,7 @@ func (this *NinjaMain) RebuildManifest(input_file string, err *string, status St
 		return false
 	}
 
-	builder := NewBuilder(this.State_, this.Config_, this.BuildLog, &this.DepsLog,
+	builder := NewBuilder(this.State_, this.Config_, this.BuildLog, this.DepsLog,
 		this.DiskInterface, status, this.StartTimeMillis, this.PrefixDir)
 	defer builder.RealeaseBuilder()
 	if !builder.AddTarget2(node, err) {
@@ -1082,7 +1084,7 @@ func (this *NinjaMain) ToolMissingDeps(options *Options, args *[]string) int {
 	}
 	disk_interface := RealDiskInterface{}
 	printer := MissingDependencyPrinter{}
-	scanner := NewMissingDependencyScanner(&printer, &this.DepsLog, this.State_, &disk_interface)
+	scanner := NewMissingDependencyScanner(&printer, this.DepsLog, this.State_, &disk_interface)
 	for _, it := range nodes {
 		scanner.ProcessNode(it)
 	}

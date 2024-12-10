@@ -127,6 +127,7 @@ func binaryLittleEndianToIntSlice(buf []byte) []int {
 }
 
 func (this *DepsLog) Load(path string, state *State, err1 *string) LoadStatus {
+	this.file_path_ = path
 	_, err := os.Stat(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -135,7 +136,6 @@ func (this *DepsLog) Load(path string, state *State, err1 *string) LoadStatus {
 		*err1 = err.Error()
 		return LOAD_ERROR
 	}
-	this.file_path_ = path
 	if !this.OpenForWriteIfNeeded() {
 		*err1 = "OpenForWriteIfNeeded failed"
 		return LOAD_ERROR
@@ -170,8 +170,15 @@ func (this *DepsLog) Load(path string, state *State, err1 *string) LoadStatus {
 			*err1 = "OUT RANGE"
 			return LOAD_ERROR
 		}
-		this.nodes_[entry.Id] = NewNodeWithMtimeAndId(entry.Path,
-			TimeStamp(entry.Mtime), entry.Id, 0)
+		node := state.GetNode(entry.Path, 0)
+		if node == nil {
+			*err1 = fmt.Sprintf("GetNode for %s return empty.", entry.Path)
+			return LOAD_ERROR
+		}
+		node.id_ = int(entry.Id)
+		node.mtime_ = TimeStamp(entry.Mtime)
+		this.nodes_[entry.Id] = node
+		//NewNodeWithMtimeAndId(entry.Path, TimeStamp(entry.Mtime), entry.Id, 0)
 	}
 	this.deps_ = make([]*Deps, total)
 	for _, entry := range entries {
@@ -310,7 +317,7 @@ func (this *DepsLog) RecordId(node *Node, mtime TimeStamp, pid int64) bool {
 // / Should be called before using file_. When false is returned, errno will
 // / be set.
 func (this *DepsLog) OpenForWriteIfNeeded() bool {
-	if this.file_path_ == "" {
+	if this.file_ != nil {
 		return true
 	}
 	needCreateTable := false
@@ -373,7 +380,6 @@ func (this *DepsLog) OpenForWriteIfNeeded() bool {
 			return false
 		}
 	}
-	this.file_path_ = "" // 文件已打开，清除路径
 	return true
 }
 

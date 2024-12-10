@@ -15,6 +15,22 @@ func NewNode(path string, slash_bits uint64) *Node {
 	ret := Node{}
 	ret.path_ = path
 	ret.slash_bits_ = slash_bits
+	ret.mtime_ = -1
+	ret.dirty_ = false
+	ret.dyndep_pending_ = false
+	ret.generated_by_dep_loader_ = false
+	ret.id_ = -1
+	return &ret
+}
+func NewNodeWithMtimeAndId(path string, mtime TimeStamp, id int64, slash_bits uint64) *Node {
+	ret := Node{}
+	ret.path_ = path
+	ret.slash_bits_ = slash_bits
+	ret.mtime_ = mtime
+	ret.dirty_ = false
+	ret.dyndep_pending_ = false
+	ret.generated_by_dep_loader_ = false
+	ret.id_ = int(id)
 	return &ret
 }
 

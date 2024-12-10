@@ -244,13 +244,6 @@ func (this *NinjaMain) OpenDepsLog(recompact_only bool) bool {
 		return success
 	}
 
-	if !this.Config_.DryRun {
-		if !this.DepsLog.OpenForWrite(path, &err) {
-			Error("opening deps log: %s", err)
-			return false
-		}
-	}
-
 	return true
 }
 

@@ -6,22 +6,22 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
-	"strings"
+	"zombiezen.com/go/sqlite"
 )
 
 // The version is stored as 4 bytes after the signature and also serves as a
 // byte order mark. Signature and version combined are 16 bytes long.
-const DepsLog_kFileSignature = "# ninjadeps\n"
-const kFileSignatureSize = len(DepsLog_kFileSignature) - 1
-
-const DepsLog_kCurrentVersion = 4
+const kFileSignature_DepsLog = "# ninjadeps %d\n"
+const kCurrentVersion_DepsLog = 4
 
 const kMaxRecordSize = (1 << 19) - 1
 
 type DepsLog struct {
 	needs_recompaction_ bool
-	file_               *os.File
+	file_               *sqlite.Conn
+	stmtInsert          *sqlite.Stmt
+	stmtFileTell        *sqlite.Stmt
+	stmtLoad            *sqlite.Stmt
 	file_path_          string
 
 	/// Maps id . Node.
@@ -58,22 +58,6 @@ func (this *DepsLog) ReleaseDepsLog() {
 	this.Close()
 }
 
-// Writing (build-time) interface.
-func (this *DepsLog) OpenForWrite(path string, err *string) bool {
-	if this.needs_recompaction_ {
-		if !this.Recompact(path, err) {
-			return false
-		}
-	}
-
-	if this.file_ != nil {
-		panic("!this.file_")
-	}
-	this.file_path_ = path // we don't actually open the file right now, but will do
-	// so on the first write attempt
-	return true
-}
-
 func (this *DepsLog) RecordDeps(node *Node, mtime TimeStamp, nodes []*Node, err *string) bool {
 	// Track whether there's any new data to be recorded.
 	made_change := false
@@ -81,14 +65,14 @@ func (this *DepsLog) RecordDeps(node *Node, mtime TimeStamp, nodes []*Node, err 
 
 	// Assign ids to all nodes that are missing one.
 	if node.id() < 0 {
-		if !this.RecordId(node) {
+		if !this.RecordId(node, mtime, -1) {
 			return false
 		}
 		made_change = true
 	}
 	for i := 0; i < node_count; i++ {
 		if nodes[i].id() < 0 {
-			if !this.RecordId(nodes[i]) {
+			if !this.RecordId(nodes[i], 0, int64(node.id())) {
 				return false
 			}
 			made_change = true
@@ -114,55 +98,9 @@ func (this *DepsLog) RecordDeps(node *Node, mtime TimeStamp, nodes []*Node, err 
 	if !made_change {
 		return true
 	}
-
-	// Update on-disk representation.
-	size := 4 * (1 + 2 + node_count)
-	if size > kMaxRecordSize {
-		*err = "ERANGE"
-		return false
-	}
-
 	if !this.OpenForWriteIfNeeded() {
 		return false
 	}
-	size |= 0x80000000 // Deps record: set high bit.
-	_, err1 := fmt.Fprintf(this.file_, "%d ", size)
-	if err1 != nil {
-		*err = err1.Error()
-		return false
-	}
-	id := node.id()
-	_, err1 = fmt.Fprintf(this.file_, "%d ", id)
-	if err1 != nil {
-		*err = err1.Error()
-		return false
-	}
-	mtime_part := uint32(mtime & 0xffffffff)
-	_, err1 = fmt.Fprintf(this.file_, "%d ", mtime_part)
-	if err1 != nil {
-		*err = err1.Error()
-		return false
-	}
-	mtime_part = uint32((mtime >> 32) & 0xffffffff)
-	_, err1 = fmt.Fprintf(this.file_, "%d ", mtime_part)
-	if err1 != nil {
-		*err = err1.Error()
-		return false
-	}
-	for i := 0; i < node_count; i++ {
-		id = nodes[i].id()
-		_, err1 := fmt.Fprintf(this.file_, "%d ", id)
-		if err1 != nil {
-			*err = err1.Error()
-			return false
-		}
-	}
-	err1 = this.file_.Sync()
-	if err1 != nil {
-		*err = err1.Error()
-		return false
-	}
-
 	// Update in-memory representation.
 	deps := NewDeps(int64(mtime), node_count)
 	for i := 0; i < node_count; i++ {
@@ -188,11 +126,8 @@ func binaryLittleEndianToIntSlice(buf []byte) []int {
 	return slice
 }
 
-const kFileSignature_DepsLog = "# ninjadeps\n"
-const kCurrentVersion_DepsLog = 4
-
 func (this *DepsLog) Load(path string, state *State, err1 *string) LoadStatus {
-	file, err := os.Open(path)
+	_, err := os.Stat(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return LOAD_NOT_FOUND
@@ -200,122 +135,58 @@ func (this *DepsLog) Load(path string, state *State, err1 *string) LoadStatus {
 		*err1 = err.Error()
 		return LOAD_ERROR
 	}
-	defer file.Close()
-
-	buf := make([]byte, kMaxRecordSize+1)
-	_, err = io.ReadFull(file, buf[:kFileSignatureSize])
-	if err != nil {
+	this.file_path_ = path
+	if !this.OpenForWriteIfNeeded() {
+		*err1 = "OpenForWriteIfNeeded failed"
 		return LOAD_ERROR
 	}
-	if !strings.HasPrefix(string(buf[:kFileSignatureSize]), kFileSignature_DepsLog) {
-		*err1 = "bad deps log signature or version; starting over"
-		os.Remove(path)
-		return LOAD_SUCCESS
+	this.stmtLoad.Reset()
+	type DepLogEntry struct {
+		Id    int64
+		Mtime int64
+		Path  string
+		Pid   int64
 	}
-
-	var version int32
-	err = binary.Read(file, binary.LittleEndian, &version)
-	if err != nil || version != kCurrentVersion_DepsLog {
-		*err1 = "bad deps log version; starting over"
-		os.Remove(path)
-		return LOAD_SUCCESS
-	}
-
-	offset, _ := file.Seek(0, io.SeekCurrent)
-	readFailed := false
-	uniqueDepRecordCount := 0
-	totalDepRecordCount := 0
-
+	var entries []*DepLogEntry
 	for {
-		var size uint32
-		err = binary.Read(file, binary.LittleEndian, &size)
+		hasRow, err := this.stmtLoad.Step()
 		if err != nil {
-			if !errors.Is(err, io.EOF) {
-				readFailed = true
-			}
-			break
-		}
-		isDeps := size&(1<<31) != 0
-		size &= 0x7FFFFFFF
-
-		if size > kMaxRecordSize || int(size)+4 > len(buf) {
-			readFailed = true
-			break
-		}
-		_, err = io.ReadFull(file, buf[:size])
-		if err != nil {
-			readFailed = true
-			break
-		}
-		offset += int64(size) + 4
-
-		if isDeps {
-			if size%4 != 0 {
-				readFailed = true
-				break
-			}
-			depsData := binaryLittleEndianToIntSlice(buf[:size])
-			outID := depsData[0]
-			mtime := uint64(uint64(depsData[2])<<32) | uint64(depsData[1])
-			depsData = depsData[3:]
-
-			depsCount := len(depsData)
-			for _, nodeID := range depsData {
-				if nodeID >= len(this.nodes_) || this.nodes_[nodeID] == nil {
-					readFailed = true
-					break
-				}
-			}
-			if readFailed {
-				break
-			}
-
-			deps := &Deps{mtime: TimeStamp(mtime), nodes: make([]*Node, depsCount)}
-			for i, nodeID := range depsData {
-				deps.nodes[i] = this.nodes_[nodeID]
-			}
-
-			totalDepRecordCount++
-			if !this.UpdateDeps(outID, deps) {
-				uniqueDepRecordCount++
-			}
-		} else {
-			pathSize := size - 4
-			if pathSize <= 0 {
-				readFailed = true
-				break
-			}
-			for buf[pathSize-1] == '\000' {
-				pathSize--
-			}
-			subpath := string(buf[:pathSize])
-			node := state.GetNode(subpath, 0)
-
-			checksum := binary.LittleEndian.Uint32(buf[size-4:])
-			expectedID := int(^checksum)
-			id := len(this.nodes_)
-			if id != expectedID || node.id_ >= 0 {
-				readFailed = true
-				break
-			}
-			node.id_ = id
-			this.nodes_ = append(this.nodes_, node)
-		}
-	}
-
-	if readFailed {
-		*err1 = "premature end of file"
-		if !this.Truncate(path, offset, err1) {
+			*err1 = err.Error()
 			return LOAD_ERROR
 		}
-		*err1 += "; recovering"
-		return LOAD_SUCCESS
+		if !hasRow {
+			break
+		}
+		id := this.stmtLoad.GetInt64("id")
+		mtime := this.stmtLoad.GetInt64("mtime")
+		path := this.stmtLoad.GetText("path")
+		pid := this.stmtLoad.GetInt64("pid")
+		entries = append(entries, &DepLogEntry{Id: id, Mtime: mtime, Path: path, Pid: pid})
 	}
-
-	if totalDepRecordCount > 1000 && totalDepRecordCount > uniqueDepRecordCount*3 {
-		this.needs_recompaction_ = true
+	total := int64(len(entries))
+	this.nodes_ = make([]*Node, total)
+	for _, entry := range entries {
+		if entry.Id >= total {
+			*err1 = "OUT RANGE"
+			return LOAD_ERROR
+		}
+		this.nodes_[entry.Id] = NewNodeWithMtimeAndId(entry.Path,
+			TimeStamp(entry.Mtime), entry.Id, 0)
 	}
-
+	this.deps_ = make([]*Deps, total)
+	for _, entry := range entries {
+		if entry.Pid >= total {
+			*err1 = "Dep PID OUT RANGE"
+			return LOAD_ERROR
+		}
+		if entry.Pid >= 0 {
+			if this.deps_[entry.Pid] == nil {
+				this.deps_[entry.Pid] = NewDeps(int64(this.nodes_[entry.Pid].mtime_), 0)
+			}
+			this.deps_[entry.Pid].node_count += 1
+			this.deps_[entry.Pid].nodes = append(this.deps_[entry.Pid].nodes, this.nodes_[entry.Id])
+		}
+	}
 	return LOAD_SUCCESS
 }
 
@@ -367,60 +238,6 @@ func (this *DepsLog) GetFirstReverseDepsNode(node *Node) *Node {
 // / Rewrite the known log entries, throwing away old data.
 func (this *DepsLog) Recompact(path string, err *string) bool {
 	METRIC_RECORD(".ninja_deps recompact")
-
-	this.Close()
-	temp_path := path + ".recompact"
-
-	// OpenForWrite() opens for append.  Make sure it's not appending to a
-	// left-over file from a previous recompaction attempt that crashed somehow.
-	os.RemoveAll(temp_path)
-
-	var new_log DepsLog
-	if !new_log.OpenForWrite(temp_path, err) {
-		return false
-	}
-
-	// Clear all known ids so that new ones can be reassigned.  The new indices
-	// will refer to the ordering in new_log, not in the current log.
-	for _, i := range this.nodes_ {
-		i.set_id(-1)
-	}
-
-	// Write out all deps again.
-	for old_id := 0; old_id < len(this.deps_); old_id++ {
-		deps := this.deps_[old_id]
-		if deps == nil {
-			continue
-		} // If nodes_[old_id] is a leaf, it has no deps.
-
-		if !IsDepsEntryLiveFor(this.nodes_[old_id]) {
-			continue
-		}
-
-		if !new_log.RecordDeps(this.nodes_[old_id], deps.mtime, deps.nodes, err) {
-			new_log.Close()
-			return false
-		}
-	}
-
-	new_log.Close()
-
-	// All nodes now have ids that refer to new_log, so steal its data.
-	this.deps_ = new_log.deps_
-	this.nodes_ = new_log.nodes_
-
-	err1 := os.RemoveAll(path)
-	if err1 != nil {
-		*err = err1.Error()
-		return false
-	}
-
-	err1 = os.Rename(temp_path, path)
-	if err1 != nil {
-		*err = err1.Error()
-		return false
-	}
-
 	return true
 }
 
@@ -466,46 +283,27 @@ func (this *DepsLog) UpdateDeps(out_id int, deps *Deps) bool {
 }
 
 // Write a node name record, assigning it an id.
-func (this *DepsLog) RecordId(node *Node) bool {
+func (this *DepsLog) RecordId(node *Node, mtime TimeStamp, pid int64) bool {
 	pathSize := len(node.path_)
 	if pathSize == 0 {
 		return false // 尝试记录空路径节点
 	}
-
-	padding := (4 - pathSize%4) % 4 // 填充到4字节边界
-
-	size := uint32(pathSize + padding + 4)
-	if size > kMaxRecordSize {
-		return false // 超过最大记录大小
-	}
-
 	if !this.OpenForWriteIfNeeded() {
 		return false
 	}
-
-	if _, err := this.file_.WriteString(strconv.FormatUint(uint64(size), 10) + " "); err != nil {
-		return false
-	}
-	if _, err := this.file_.WriteString(node.path_ + " "); err != nil {
-		return false
-	}
-	//if padding > 0 {
-	//	if _, err := this.file_.WriteString(make([]byte, padding)); err != nil {
-	//		return false
-	//	}
-	//}
 	id := len(this.nodes_)
-	checksum := uint32(^uint32(id))
-	if _, err := this.file_.WriteString(strconv.FormatUint(uint64(checksum), 10) + "\n"); err != nil {
+	this.stmtInsert.Reset()
+	this.stmtInsert.SetInt64("$id", int64(id))
+	this.stmtInsert.SetText("$path", node.path_)
+	this.stmtInsert.SetInt64("$mtime", int64(mtime))
+	this.stmtInsert.SetInt64("$pid", pid)
+	_, err := this.stmtInsert.Step()
+	if err != nil {
+		panic(err)
 		return false
 	}
-	if err := this.file_.Sync(); err != nil {
-		return false
-	}
-
 	node.id_ = id
 	this.nodes_ = append(this.nodes_, node)
-
 	return true
 }
 
@@ -515,51 +313,79 @@ func (this *DepsLog) OpenForWriteIfNeeded() bool {
 	if this.file_path_ == "" {
 		return true
 	}
-	var err error
-	this.file_, err = os.OpenFile(this.file_path_, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
+	needCreateTable := false
+	if _, err := os.Stat(this.file_path_); errors.Is(err, os.ErrNotExist) {
+		needCreateTable = true
+	} else if err != nil {
+		panic(err)
 		return false
 	}
-	//defer func() {
-	//	if this.file_ != nil {
-	//		this.file_.Close()
-	//	}
-	//}()
-
-	// 设置缓冲区大小，并在每个记录后刷新文件缓冲区以确保记录不会被部分写入
-	// this.file_.SetBufSize(kMaxRecordSize + 1)
-
-	// 设置文件描述符在执行时关闭
-	SetCloseOnExec(int(this.file_.Fd()))
-
-	// 在 Windows 上，以追加模式打开文件不会将文件指针设置为文件末尾。明确地执行此操作。
-	//if _, err := this.file_.Seek(0, os.SEEK_END); err != nil {
-	//	return false
-	//}
+	var err error
+	flag := sqlite.OpenReadWrite
+	if needCreateTable {
+		flag |= sqlite.OpenCreate
+	}
+	this.file_, err = sqlite.OpenConn(this.file_path_, flag)
+	if err != nil {
+		panic(err)
+		return false
+	}
+	if needCreateTable {
+		stmt, err := this.file_.Prepare("CREATE TABLE IF NOT EXISTS ninja_deps " +
+			"(`id` INTEGER PRIMARY KEY, `path` TEXT, `mtime` INTEGER, `pid` INTEGER);")
+		if err != nil {
+			panic(err)
+			return false
+		}
+		if _, err := stmt.Step(); err != nil {
+			panic(err)
+			return false
+		}
+	}
+	this.stmtInsert, err = this.file_.Prepare("INSERT INTO ninja_deps (`id`, `path`, `mtime`, `pid`) VALUES" +
+		" ($id, $path, $mtime, $pid) ON CONFLICT(id) " +
+		" DO UPDATE SET `path`=$path, `mtime`= $mtime, `pid`=$pid;")
+	if err != nil {
+		panic(err)
+		return false
+	}
+	this.stmtFileTell, err = this.file_.Prepare("SELECT count(*) FROM ninja_deps WHERE `id`=-2")
+	if err != nil {
+		panic(err)
+		return false
+	}
+	this.stmtLoad, err = this.file_.Prepare("SELECT * FROM ninja_deps WHERE `id`<>-2")
+	if err != nil {
+		panic(err)
+		return false
+	}
 
 	// 如果文件位置为 0，则写入文件签名和版本号
 	if this.fileTell() == 0 {
-		if _, err := this.file_.WriteString(kFileSignature_DepsLog); err != nil {
+		this.stmtInsert.Reset()
+		this.stmtInsert.SetInt64("$id", -2)
+		this.stmtInsert.SetText("$path", fmt.Sprintf(kFileSignature_DepsLog, kCurrentVersion_DepsLog))
+		this.stmtInsert.SetInt64("$mtime", kCurrentVersion_DepsLog)
+		this.stmtInsert.SetInt64("$pid", -2)
+		_, err := this.stmtInsert.Step()
+		if err != nil {
+			panic(err)
 			return false
 		}
-		if _, err := this.file_.WriteString(strconv.Itoa(kCurrentVersion_DepsLog)); err != nil {
-			return false
-		}
-	}
-	if err := this.file_.Sync(); err != nil {
-		return false
 	}
 	this.file_path_ = "" // 文件已打开，清除路径
 	return true
 }
 
-func (d *DepsLog) fileTell() int64 {
-	pos, err := d.file_.Seek(0, os.SEEK_CUR)
-	if err != nil {
-		// 处理错误
+func (this *DepsLog) fileTell() int64 {
+	this.stmtFileTell.Reset()
+	if hasRow, err := this.stmtFileTell.Step(); err != nil {
+		return 0
+	} else if !hasRow {
 		return 0
 	}
-	return pos
+	cnt := this.stmtFileTell.ColumnInt64(0)
+	return cnt
 }
 
 // SetCloseOnExec 设置文件描述符在执行时关闭

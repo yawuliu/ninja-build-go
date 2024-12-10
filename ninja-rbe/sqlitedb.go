@@ -123,7 +123,7 @@ func CheckCommandHashAndMtimeExist(command_hash string, mtime string) (bool, err
 	} else if !hasRow {
 		return false, nil
 	}
-	cnt := stmtFindExistByKey.ColumnInt(0)
+	cnt := stmtFindExistByKey.ColumnInt64(0)
 	return cnt > 0, nil
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -19,6 +20,15 @@ var (
 	generateIndexPages = flag.Bool("generateIndexPages", true, "Whether to generate directory index pages")
 	vhost              = flag.Bool("vhost", false, "Enables virtual hosting by prepending the requested path with the requested hostname")
 )
+
+func shutdown(ctx context.Context) {
+	CloseDb()
+	StopScheduler()
+	err := fsServer.ShutdownWithContext(ctx)
+	if err != nil {
+		log.Println(err)
+	}
+}
 
 func main() {
 	// Parse command-line flags.

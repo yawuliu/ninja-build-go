@@ -1,13 +1,20 @@
 package main
 
 type RbeLogEntry struct {
-	Id          int64
-	Output      string /* index_output */
+	Id int64
+	// 本文件的路径
+	Output string /* index_output */
+	// 本文件命令行的HASH值
 	CommandHash string /* index_hash,UNIQUE */
-	Mtime       string /* index_hash,UNIQUE */
-	StartTime   string
-	EndTime     string
-	OutputHash  string
+	// 本文件输入文件的HASH
+	Mtime string /* index_hash,UNIQUE */
+	// 依赖文件信息 -- 外键指向
+	// 开始时间
+	StartTime string
+	// 结束时间
+	EndTime string
+	// 本文件的HASH值
+	OutputHash string
 	//
 	Instance        string /* index_inst */
 	CreatedAt       int64
